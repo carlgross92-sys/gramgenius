@@ -1,0 +1,16 @@
+{
+  "crons": [
+    {
+      "path": "/api/schedule/process",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/engage/comments",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/analytics/growth",
+      "schedule": "0 9 * * *"
+    }
+  ]
+}

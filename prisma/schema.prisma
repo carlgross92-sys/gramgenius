@@ -1,0 +1,164 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model BrandProfile {
+  id               String   @id @default(cuid())
+  name             String
+  instagramHandle  String
+  niche            String
+  targetAudience   String
+  brandVoice       String
+  contentPillars   String
+  postingGoal      Int      @default(4)
+  autoPostEnabled  Boolean  @default(false)
+  timezone         String   @default("America/Los_Angeles")
+  bestTimesJson    String   @default("[]")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  posts            Post[]
+  ideas            ContentIdea[]
+  competitors      Competitor[]
+  stories          StorySequence[]
+  growthMetrics    GrowthMetric[]
+  collabProspects  CollabProspect[]
+}
+
+model Post {
+  id               String    @id @default(cuid())
+  topic            String
+  caption          String
+  hashtags         String
+  imageUrl         String?
+  imagePrompt      String?
+  videoUrl         String?
+  videoPrompt      String?
+  voiceoverUrl     String?
+  reelScript       String?
+  hookTemplate     String?
+  status           String    @default("DRAFT")
+  postType         String    @default("FEED")
+  platform         String    @default("INSTAGRAM")
+  scheduledAt      DateTime?
+  publishedAt      DateTime?
+  instagramPostId  String?
+  mediaContainerId String?
+  failureReason    String?
+  engagementNotes  String?
+  brandProfileId   String
+  brand            BrandProfile @relation(fields: [brandProfileId], references: [id])
+  analytics        PostAnalytics?
+  carouselSlides   CarouselSlide[]
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+model CarouselSlide {
+  id               String @id @default(cuid())
+  postId           String
+  post             Post   @relation(fields: [postId], references: [id])
+  slideNumber      Int
+  headline         String
+  bodyText         String
+  visualSuggestion String
+  imageUrl         String?
+}
+
+model PostAnalytics {
+  id          String   @id @default(cuid())
+  postId      String   @unique
+  post        Post     @relation(fields: [postId], references: [id])
+  likes       Int      @default(0)
+  comments    Int      @default(0)
+  reach       Int      @default(0)
+  impressions Int      @default(0)
+  saves       Int      @default(0)
+  shares      Int      @default(0)
+  fetchedAt   DateTime @default(now())
+}
+
+model ContentIdea {
+  id                     String   @id @default(cuid())
+  title                  String
+  description            String
+  trendingReason         String
+  captionAngle           String
+  suggestedHashtags      String
+  postTypeRecommendation String   @default("FEED")
+  trendScore             Int      @default(5)
+  used                   Boolean  @default(false)
+  usedAt                 DateTime?
+  brandProfileId         String
+  brand                  BrandProfile @relation(fields: [brandProfileId], references: [id])
+  createdAt              DateTime @default(now())
+}
+
+model HookTemplate {
+  id                String  @id @default(cuid())
+  template          String
+  category          String
+  timesUsed         Int     @default(0)
+  avgEngagementRate Float   @default(0)
+  isActive          Boolean @default(true)
+}
+
+model Hashtag {
+  id           String    @id @default(cuid())
+  tag          String    @unique
+  sizeCategory String
+  timesUsed    Int       @default(0)
+  avgReach     Float     @default(0)
+  isBanned     Boolean   @default(false)
+  lastUsed     DateTime?
+}
+
+model Competitor {
+  id              String   @id @default(cuid())
+  handle          String
+  niche           String
+  lastAnalyzedAt  DateTime?
+  insightsJson    String   @default("{}")
+  brandProfileId  String
+  brand           BrandProfile @relation(fields: [brandProfileId], references: [id])
+  createdAt       DateTime @default(now())
+}
+
+model StorySequence {
+  id             String   @id @default(cuid())
+  theme          String
+  slidesJson     String
+  status         String   @default("DRAFT")
+  brandProfileId String
+  brand          BrandProfile @relation(fields: [brandProfileId], references: [id])
+  createdAt      DateTime @default(now())
+}
+
+model GrowthMetric {
+  id                String   @id @default(cuid())
+  date              DateTime
+  followerCount     Int      @default(0)
+  newFollowers      Int      @default(0)
+  postsPublished    Int      @default(0)
+  avgEngagementRate Float    @default(0)
+  topPostId         String?
+  brandProfileId    String
+  brand             BrandProfile @relation(fields: [brandProfileId], references: [id])
+}
+
+model CollabProspect {
+  id                 String   @id @default(cuid())
+  handle             String
+  estimatedFollowers Int
+  engagementRate     Float
+  contentNiche       String
+  whyGoodFit         String
+  pitchDraft         String
+  status             String   @default("NOT_CONTACTED")
+  brandProfileId     String
+  brand              BrandProfile @relation(fields: [brandProfileId], references: [id])
+  createdAt          DateTime @default(now())
+}
