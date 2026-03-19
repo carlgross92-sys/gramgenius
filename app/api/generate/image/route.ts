@@ -33,18 +33,19 @@ ${style ? `- Apply this visual style: ${style}` : ""}`;
       500
     );
 
-    const imageUrl = await generateImage(
+    const result = await generateImage(
       enhancedPrompt,
       "1024x1792",
       "hd",
       style ?? "vivid"
     );
 
-    return Response.json({ imageUrl, enhancedPrompt });
+    return Response.json({ imageUrl: result.imageUrl, enhancedPrompt });
   } catch (error) {
-    console.error("Failed to generate image:", error);
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("Failed to generate image:", message);
     return Response.json(
-      { error: "Failed to generate image" },
+      { error: `Failed to generate image: ${message}` },
       { status: 500 }
     );
   }
