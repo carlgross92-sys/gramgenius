@@ -6,10 +6,8 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const sort = searchParams.get("sort");
 
-    let orderBy: Record<string, string> = { createdAt: "desc" };
-    if (sort === "timesUsed") {
-      orderBy = { timesUsed: "desc" };
-    } else if (sort === "avgReach") {
+    let orderBy: Record<string, string> = { timesUsed: "desc" };
+    if (sort === "avgReach") {
       orderBy = { avgReach: "desc" };
     }
 
