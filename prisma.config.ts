@@ -1,5 +1,8 @@
-import "dotenv/config";
+import dotenv from "dotenv";
 import { defineConfig } from "prisma/config";
+
+dotenv.config({ path: ".env.local" });
+dotenv.config({ path: ".env" });
 
 export default defineConfig({
   schema: "prisma/schema.prisma",
@@ -8,6 +11,7 @@ export default defineConfig({
     seed: "npx tsx prisma/seed.ts",
   },
   datasource: {
-    url: process.env.DATABASE_URL,
+    // Use direct (non-pooler) endpoint for migrations
+    url: process.env.DIRECT_DATABASE_URL || process.env.DATABASE_URL,
   },
 });
