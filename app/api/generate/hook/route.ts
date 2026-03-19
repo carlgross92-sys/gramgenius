@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
       hookTemplates.length > 0
         ? `\n\nAvailable hook templates to choose from and customize:\n${hookTemplates
             .map(
-              (h) =>
+              (h: { category: string; template: string; avgEngagementRate: number }) =>
                 `- [${h.category}] "${h.template}" (engagement: ${h.avgEngagementRate})`
             )
             .join("\n")}`
@@ -74,7 +74,7 @@ Caption context: ${captionText.substring(0, 500)}`;
     if (hookTemplates.length > 0) {
       for (const template of hookTemplates) {
         const wasUsed = result.hooks.some(
-          (h) =>
+          (h: { category: string }) =>
             h.category.toLowerCase() === template.category.toLowerCase()
         );
         if (wasUsed) {

@@ -97,7 +97,7 @@ ${JSON.stringify(commentsForAI, null, 2)}`;
 
         for (const comment of comments) {
           const replyData = result.replies.find(
-            (r) => r.commentId === comment.id
+            (r: { commentId: string }) => r.commentId === comment.id
           );
           allComments.push({
             id: comment.id,
