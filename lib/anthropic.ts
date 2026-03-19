@@ -1,15 +1,17 @@
 import Anthropic from "@anthropic-ai/sdk";
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+let _anthropic: Anthropic | null = null;
+function getAnthropic(): Anthropic {
+  if (!_anthropic) _anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  return _anthropic;
+}
 
 export async function generateWithClaude(
   systemPrompt: string,
   userPrompt: string,
   maxTokens: number = 4096
 ): Promise<string> {
-  const response = await anthropic.messages.create({
+  const response = await getAnthropic().messages.create({
     model: "claude-sonnet-4-20250514",
     max_tokens: maxTokens,
     system: systemPrompt,
@@ -35,4 +37,4 @@ export async function generateWithClaudeJSON<T>(
   return JSON.parse(cleaned) as T;
 }
 
-export default anthropic;
+export default getAnthropic;

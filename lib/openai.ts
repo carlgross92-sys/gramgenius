@@ -2,9 +2,11 @@ import OpenAI from "openai";
 import { put } from "@vercel/blob";
 import { v4 as uuidv4 } from "uuid";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+let _openai: OpenAI | null = null;
+function getOpenAI(): OpenAI {
+  if (!_openai) _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  return _openai;
+}
 
 export async function generateImage(
   prompt: string,
@@ -12,7 +14,7 @@ export async function generateImage(
   quality: "standard" | "hd" = "hd",
   style: "vivid" | "natural" = "vivid"
 ): Promise<{ imageUrl: string; revisedPrompt: string }> {
-  const response = await openai.images.generate({
+  const response = await getOpenAI().images.generate({
     model: "dall-e-3",
     prompt,
     n: 1,
@@ -41,4 +43,4 @@ export async function generateImage(
   };
 }
 
-export default openai;
+export default getOpenAI;
