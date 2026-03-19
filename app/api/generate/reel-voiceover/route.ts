@@ -28,21 +28,8 @@ export async function POST(request: NextRequest) {
 
     const fullScript = voiceoverLines.join(" ... ");
 
-    let audioBuffer: Buffer;
-    try {
-      audioBuffer = await textToSpeech(fullScript);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "unknown";
-      return Response.json({ error: `ElevenLabs TTS failed: ${msg}` }, { status: 500 });
-    }
-
-    let voiceoverUrl: string;
-    try {
-      voiceoverUrl = await saveAudio(audioBuffer);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "unknown";
-      return Response.json({ error: `Blob upload failed: ${msg}`, bufferSize: audioBuffer.length }, { status: 500 });
-    }
+    const audioBuffer = await textToSpeech(fullScript);
+    const voiceoverUrl = await saveAudio(audioBuffer);
 
     return Response.json({ voiceoverUrl });
   } catch (error) {
