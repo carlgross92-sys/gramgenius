@@ -104,7 +104,7 @@ Provide detailed competitive intelligence and identify content gaps relative to 
                 brandProfileId,
               },
             })
-            .then((c) => c?.id ?? "nonexistent"),
+            .then((c: { id: string } | null) => c?.id ?? "nonexistent"),
         },
         update: {
           niche: brand.niche,
