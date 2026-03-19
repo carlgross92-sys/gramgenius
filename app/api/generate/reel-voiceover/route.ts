@@ -33,9 +33,10 @@ export async function POST(request: NextRequest) {
 
     return Response.json({ voiceoverUrl });
   } catch (error) {
-    console.error("Failed to generate voiceover:", error);
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("Failed to generate voiceover:", message);
     return Response.json(
-      { error: "Failed to generate voiceover" },
+      { error: `Failed to generate voiceover: ${message}` },
       { status: 500 }
     );
   }

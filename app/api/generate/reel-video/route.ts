@@ -98,9 +98,10 @@ export async function POST(request: NextRequest) {
       failedScenes: scenes.length - scenePaths.length,
     });
   } catch (error) {
-    console.error("Failed to generate reel video:", error);
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("Failed to generate reel video:", message);
     return Response.json(
-      { error: "Failed to generate reel video" },
+      { error: `Failed to generate reel video: ${message}` },
       { status: 500 }
     );
   }
