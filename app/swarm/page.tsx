@@ -283,9 +283,55 @@ export default function SwarmStudioPage() {
               {/* Metrics bar */}
               <div className="flex items-center gap-2 text-xs text-[#888]">
                 <Clock className="h-3 w-3" />
-                Completed in {(totalMs / 1000).toFixed(1)}s across 6 agents
+                Completed in {(totalMs / 1000).toFixed(1)}s across 7 agents
                 {r.postId ? <span className="ml-2 text-[#22c55e]">Post saved as draft</span> : null}
               </div>
+
+              {/* Media Agent Status */}
+              {(() => {
+                const ms = (r.mediaStatus || {}) as Record<string, unknown>;
+                const errs = Array.isArray(r.mediaErrors) ? (r.mediaErrors as string[]) : [];
+                return (
+                  <DarkCard className={errs.length > 0 ? "border-[#f59e0b]/30" : "border-[#22c55e]/30"}>
+                    <h3 className="text-sm font-semibold text-[#f0b429] mb-2">Media Agent</h3>
+                    <div className="flex flex-col gap-1 text-sm">
+                      {ms.imageGenerated ? (
+                        <div className="flex items-center gap-2 text-[#22c55e]">
+                          <CheckCircle className="h-3 w-3" /> Generated image
+                        </div>
+                      ) : null}
+                      {(ms.scenesGenerated as number) > 0 ? (
+                        <div className="flex items-center gap-2 text-[#22c55e]">
+                          <CheckCircle className="h-3 w-3" /> Generated {String(ms.scenesGenerated)} scene images
+                        </div>
+                      ) : null}
+                      {(ms.videosGenerated as number) > 0 ? (
+                        <div className="flex items-center gap-2 text-[#22c55e]">
+                          <CheckCircle className="h-3 w-3" /> Generated {String(ms.videosGenerated)} scene videos (Runway ML)
+                        </div>
+                      ) : null}
+                      {ms.voiceoverGenerated ? (
+                        <div className="flex items-center gap-2 text-[#22c55e]">
+                          <CheckCircle className="h-3 w-3" /> Generated voiceover (ElevenLabs)
+                        </div>
+                      ) : null}
+                      {ms.postedToInstagram ? (
+                        <div className="flex items-center gap-2 text-[#22c55e]">
+                          <CheckCircle className="h-3 w-3" /> Posted to Instagram
+                        </div>
+                      ) : null}
+                      {errs.map((err, i) => (
+                        <div key={i} className="flex items-center gap-2 text-[#ef4444]">
+                          <XCircle className="h-3 w-3" /> {err}
+                        </div>
+                      ))}
+                      {!ms.imageGenerated && !ms.scenesGenerated && errs.length === 0 ? (
+                        <div className="text-[#888] text-xs">No media generated</div>
+                      ) : null}
+                    </div>
+                  </DarkCard>
+                );
+              })()}
 
               {/* Instagram Caption */}
               <DarkCard>

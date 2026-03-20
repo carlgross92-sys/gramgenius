@@ -41,7 +41,8 @@ export async function POST(request: NextRequest) {
     // Save post as draft
     const firstCaption = (swarmOutput.captions || [])[0]?.text ?? topic;
     const hashtagStr = (swarmOutput.hashtags?.fullSet || []).join(" ");
-    const effectivePostType = swarmOutput.strategy?.format || postType || "FEED";
+    // User's explicit postType takes priority over Claude's strategy suggestion
+    const effectivePostType = (postType || swarmOutput.strategy?.format || "FEED").toUpperCase();
 
     const post = await prisma.post.create({
       data: {
@@ -87,17 +88,38 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return Response.json({
-      ...swarmOutput,
-      postId: post.id,
-      generatedImageUrl: mediaResult.imageUrl || null,
+    const mediaStatus = {
+      agentRan: true,
+      postType: effectivePostType,
+      imageGenerated: !!mediaResult.imageUrl,
+      imageUrl: mediaResult.imageUrl || null,
+      scenesGenerated: (mediaResult.sceneImages || []).length,
       sceneImages: mediaResult.sceneImages || [],
+      videosGenerated: (mediaResult.sceneVideos || []).length,
       sceneVideos: mediaResult.sceneVideos || [],
+      voiceoverGenerated: !!mediaResult.voiceoverUrl,
       voiceoverUrl: mediaResult.voiceoverUrl || null,
+      postedToInstagram: !!mediaResult.instagramPostId,
       instagramPostId: mediaResult.instagramPostId || null,
       instagramUrl: mediaResult.instagramUrl || null,
       mediaLibraryIds: mediaResult.mediaLibraryIds || [],
-      mediaErrors: mediaResult.errors || [],
+      errors: mediaResult.errors || [],
+    };
+
+    console.log("[Swarm] Media Agent result:", JSON.stringify(mediaStatus, null, 2));
+
+    return Response.json({
+      ...swarmOutput,
+      postId: post.id,
+      generatedImageUrl: mediaStatus.imageUrl,
+      sceneImages: mediaStatus.sceneImages,
+      sceneVideos: mediaStatus.sceneVideos,
+      voiceoverUrl: mediaStatus.voiceoverUrl,
+      instagramPostId: mediaStatus.instagramPostId,
+      instagramUrl: mediaStatus.instagramUrl,
+      mediaLibraryIds: mediaStatus.mediaLibraryIds,
+      mediaErrors: mediaStatus.errors,
+      mediaStatus,
     });
   } catch (error) {
     console.error("Swarm execution failed:", error);
