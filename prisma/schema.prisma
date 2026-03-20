@@ -162,3 +162,41 @@ model CollabProspect {
   brand              BrandProfile @relation(fields: [brandProfileId], references: [id])
   createdAt          DateTime @default(now())
 }
+
+model EngineConfig {
+  id              String    @id @default(cuid())
+  enabled         Boolean   @default(true)
+  feedPostsPerDay Int       @default(7)
+  reelsPerDay     Int       @default(3)
+  maxPostsPerDay  Int       @default(10)
+  autoResearch    Boolean   @default(true)
+  autoGenerate    Boolean   @default(true)
+  autoPublish     Boolean   @default(true)
+  lastRunAt       DateTime?
+  nextRunAt       DateTime?
+  totalPublished  Int       @default(0)
+  totalFailed     Int       @default(0)
+  pausedUntil     DateTime?
+  updatedAt       DateTime  @updatedAt
+}
+
+model ContentQueue {
+  id         String    @id @default(cuid())
+  topic      String
+  category   String
+  trendScore Int       @default(5)
+  used       Boolean   @default(false)
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+}
+
+model EngineLog {
+  id             String   @id @default(cuid())
+  runAt          DateTime @default(now())
+  feedScheduled  Int      @default(0)
+  reelsScheduled Int      @default(0)
+  published      Int      @default(0)
+  failed         Int      @default(0)
+  errors         String   @default("[]")
+  durationMs     Int      @default(0)
+}

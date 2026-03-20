@@ -13,6 +13,9 @@ import {
   Hash,
   Loader2,
   Heart,
+  Zap,
+  Play,
+  Calendar as CalendarIcon,
 } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { StatsCard } from "@/components/dashboard/StatsCard";
@@ -41,6 +44,109 @@ export default function DashboardPage() {
   const [recentPosts, setRecentPosts] = useState<Array<{id:string;caption:string;postType:string;status:string;scheduledAt?:string|null}>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [autopilot, setAutopilot] = useState({
+    enabled: false,
+    lastRun: null as string | null,
+    nextRun: null as string | null,
+    publishedToday: 0,
+    scheduledToday: 0,
+    reelsThisWeek: 0,
+    nextPostTime: null as string | null,
+    nextPostTopic: null as string | null,
+  });
+  const [engineConfig, setEngineConfig] = useState({
+    feedPostsPerDay: 7,
+    reelsPerDay: 3,
+    maxPostsPerDay: 10,
+  });
+  const [runningEngine, setRunningEngine] = useState(false);
+
+  const loadAutopilotStatus = async () => {
+    try {
+      const [statusRes, configRes] = await Promise.allSettled([
+        fetch("/api/auto/status"),
+        fetch("/api/auto/config"),
+      ]);
+
+      if (statusRes.status === "fulfilled" && statusRes.value.ok) {
+        const data = await statusRes.value.json();
+        setAutopilot((prev) => ({
+          ...prev,
+          enabled: data.enabled ?? prev.enabled,
+          lastRun: data.lastRun ?? prev.lastRun,
+          nextRun: data.nextRun ?? prev.nextRun,
+          publishedToday: data.publishedToday ?? prev.publishedToday,
+          scheduledToday: data.scheduledToday ?? prev.scheduledToday,
+          reelsThisWeek: data.reelsThisWeek ?? prev.reelsThisWeek,
+          nextPostTime: data.nextPostTime ?? prev.nextPostTime,
+          nextPostTopic: data.nextPostTopic ?? prev.nextPostTopic,
+        }));
+      }
+
+      if (configRes.status === "fulfilled" && configRes.value.ok) {
+        const data = await configRes.value.json();
+        setEngineConfig((prev) => ({
+          feedPostsPerDay: data.feedPostsPerDay ?? prev.feedPostsPerDay,
+          reelsPerDay: data.reelsPerDay ?? prev.reelsPerDay,
+          maxPostsPerDay: data.maxPostsPerDay ?? prev.maxPostsPerDay,
+        }));
+      }
+    } catch {
+      // Silently fail — autopilot status is non-critical
+    }
+  };
+
+  const toggleAutopilot = async () => {
+    try {
+      const res = await fetch("/api/auto/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: !autopilot.enabled }),
+      });
+      if (res.ok) {
+        setAutopilot((prev) => ({ ...prev, enabled: !prev.enabled }));
+      }
+    } catch {
+      // Silently fail
+    }
+  };
+
+  const runEngineNow = async () => {
+    setRunningEngine(true);
+    try {
+      await fetch("/api/auto/daily-engine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      await loadAutopilotStatus();
+    } catch {
+      // Silently fail
+    } finally {
+      setRunningEngine(false);
+    }
+  };
+
+  const updateConfig = async (newConfig: Partial<typeof engineConfig>) => {
+    const merged = { ...engineConfig, ...newConfig };
+    setEngineConfig(merged);
+    try {
+      await fetch("/api/auto/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(merged),
+      });
+    } catch {
+      // Silently fail
+    }
+  };
+
+  useEffect(() => {
+    loadAutopilotStatus();
+    const interval = setInterval(loadAutopilotStatus, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     async function fetchData() {
@@ -168,6 +274,153 @@ export default function DashboardPage() {
             </Link>
           ))}
         </div>
+
+        {/* Autopilot Control Panel */}
+        <DarkCard glow className="flex flex-col gap-5">
+          {/* Header row */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {autopilot.enabled && (
+                <span className="relative flex h-3 w-3">
+                  <span className="absolute inline-flex h-full w-full animate-pulse rounded-full bg-[#22c55e] opacity-75" />
+                  <span className="relative inline-flex h-3 w-3 rounded-full bg-[#22c55e]" />
+                </span>
+              )}
+              <Zap className="h-5 w-5 text-[#f0b429]" />
+              <h3 className="text-lg font-bold text-white tracking-wide">AUTOPILOT</h3>
+            </div>
+            <button
+              onClick={toggleAutopilot}
+              className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ${
+                autopilot.enabled ? "bg-[#f0b429]" : "bg-[#333]"
+              }`}
+              role="switch"
+              aria-checked={autopilot.enabled}
+            >
+              <span
+                className={`inline-block h-5 w-5 rounded-full bg-white shadow-md transition-transform duration-200 ${
+                  autopilot.enabled ? "translate-x-6" : "translate-x-1"
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Status indicators 2x2 grid */}
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <div className="flex items-center gap-2">
+              <CalendarIcon className="h-4 w-4 text-[#f0b429]" />
+              <div>
+                <p className="text-xs text-[#888]">Next Post</p>
+                <p className="text-sm font-medium text-white">
+                  {autopilot.nextPostTime
+                    ? new Date(autopilot.nextPostTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                    : "—"}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <CheckCircle className="h-4 w-4 text-[#f0b429]" />
+              <div>
+                <p className="text-xs text-[#888]">Published Today</p>
+                <p className="text-sm font-medium text-white">{autopilot.publishedToday}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Film className="h-4 w-4 text-[#f0b429]" />
+              <div>
+                <p className="text-xs text-[#888]">Reels This Week</p>
+                <p className="text-sm font-medium text-white">{autopilot.reelsThisWeek}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-[#f0b429]" />
+              <div>
+                <p className="text-xs text-[#888]">Engine Schedule</p>
+                <p className="text-sm font-medium text-white">
+                  {autopilot.nextRun
+                    ? new Date(autopilot.nextRun).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                    : "Idle"}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Action buttons row */}
+          <div className="flex flex-wrap gap-3">
+            <GoldButton onClick={runEngineNow} disabled={runningEngine}>
+              {runningEngine ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Play className="h-4 w-4" />
+              )}
+              {runningEngine ? "Running..." : "Run Engine Now"}
+            </GoldButton>
+            <Link href="/calendar">
+              <GoldButton variant="secondary">
+                <CalendarIcon className="h-4 w-4" />
+                View Schedule
+              </GoldButton>
+            </Link>
+          </div>
+
+          {/* Sliders row */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs text-[#888]">Feed posts / day</label>
+                <span className="text-sm font-medium text-white">{engineConfig.feedPostsPerDay}</span>
+              </div>
+              <input
+                type="range"
+                min={1}
+                max={7}
+                value={engineConfig.feedPostsPerDay}
+                onChange={(e) =>
+                  setEngineConfig((prev) => ({ ...prev, feedPostsPerDay: Number(e.target.value) }))
+                }
+                onMouseUp={() => updateConfig({ feedPostsPerDay: engineConfig.feedPostsPerDay })}
+                onTouchEnd={() => updateConfig({ feedPostsPerDay: engineConfig.feedPostsPerDay })}
+                className="w-full accent-[#f0b429]"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs text-[#888]">Reels / day</label>
+                <span className="text-sm font-medium text-white">{engineConfig.reelsPerDay}</span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={3}
+                value={engineConfig.reelsPerDay}
+                onChange={(e) =>
+                  setEngineConfig((prev) => ({ ...prev, reelsPerDay: Number(e.target.value) }))
+                }
+                onMouseUp={() => updateConfig({ reelsPerDay: engineConfig.reelsPerDay })}
+                onTouchEnd={() => updateConfig({ reelsPerDay: engineConfig.reelsPerDay })}
+                className="w-full accent-[#f0b429]"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs text-[#888]">Max / day</label>
+                <span className="text-sm font-medium text-white">{engineConfig.maxPostsPerDay}</span>
+              </div>
+              <input
+                type="range"
+                min={1}
+                max={10}
+                value={engineConfig.maxPostsPerDay}
+                onChange={(e) =>
+                  setEngineConfig((prev) => ({ ...prev, maxPostsPerDay: Number(e.target.value) }))
+                }
+                onMouseUp={() => updateConfig({ maxPostsPerDay: engineConfig.maxPostsPerDay })}
+                onTouchEnd={() => updateConfig({ maxPostsPerDay: engineConfig.maxPostsPerDay })}
+                className="w-full accent-[#f0b429]"
+              />
+            </div>
+          </div>
+        </DarkCard>
 
         {/* Content Grid */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
