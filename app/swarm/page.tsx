@@ -47,7 +47,7 @@ import type {
   ResearchOutput,
   StrategyOutput,
   SwarmMetrics,
-} from "@/lib/swarm";
+} from "@/lib/swarm-types";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -470,7 +470,7 @@ export default function SwarmStudioPage() {
                         Hashtags
                       </h4>
                       <div className="flex flex-wrap gap-1.5">
-                        {result.hashtags.fullSet.map((tag, i) => (
+                        {(result.hashtags?.fullSet || []).map((tag, i) => (
                           <span
                             key={i}
                             className="rounded-full bg-[#f0b429]/10 px-2.5 py-1 text-xs font-medium text-[#f0b429]"
@@ -479,9 +479,9 @@ export default function SwarmStudioPage() {
                           </span>
                         ))}
                       </div>
-                      {result.hashtags.warningFlags?.length > 0 && (
+                      {(result.hashtags?.warningFlags || []).length > 0 && (
                         <p className="mt-2 text-xs text-red-400">
-                          Warnings: {result.hashtags.warningFlags.join(", ")}
+                          Warnings: {(result.hashtags?.warningFlags || []).join(", ")}
                         </p>
                       )}
                     </div>
@@ -492,7 +492,7 @@ export default function SwarmStudioPage() {
                         CTA Options
                       </h4>
                       <div className="flex flex-col gap-2">
-                        {result.ctas.ctas.map((cta, i) => (
+                        {(result.ctas?.ctas || []).map((cta, i) => (
                           <div
                             key={i}
                             className="flex items-center gap-3 rounded-lg border border-[#1a1a1a] bg-[#0d0d0d] px-4 py-2.5"
@@ -613,12 +613,12 @@ export default function SwarmStudioPage() {
                         <h4 className="text-sm font-semibold text-white">Research Insights</h4>
                       </div>
                       <div className="grid grid-cols-2 gap-3">
-                        <IntelCard title="Trends" items={result.researchInsights.trends} />
-                        <IntelCard title="Pain Points" items={result.researchInsights.audiencePainPoints} />
-                        <IntelCard title="Content Angles" items={result.researchInsights.contentAngles} />
-                        <IntelCard title="Viral Formats" items={result.researchInsights.viralFormats} />
-                        <IntelCard title="Emotional Hooks" items={result.researchInsights.emotionalHooks} />
-                        <IntelCard title="Competitor Gaps" items={result.researchInsights.competitorGaps} />
+                        <IntelCard title="Trends" items={result.researchInsights?.trends} />
+                        <IntelCard title="Pain Points" items={result.researchInsights?.audiencePainPoints} />
+                        <IntelCard title="Content Angles" items={result.researchInsights?.contentAngles} />
+                        <IntelCard title="Viral Formats" items={result.researchInsights?.viralFormats} />
+                        <IntelCard title="Emotional Hooks" items={result.researchInsights?.emotionalHooks} />
+                        <IntelCard title="Competitor Gaps" items={result.researchInsights?.competitorGaps} />
                       </div>
                     </DarkCard>
 
@@ -663,7 +663,7 @@ export default function SwarmStudioPage() {
                         <h4 className="text-sm font-semibold text-white">Editor Notes</h4>
                       </div>
                       <div className="flex flex-col gap-3">
-                        {result.captions.map((cap, i) => (
+                        {(result.captions || []).map((cap, i) => (
                           <div key={i} className="rounded-lg bg-[#0d0d0d] p-3">
                             <div className="mb-1 flex items-center gap-2">
                               <Badge className="bg-[#f0b429]/10 text-[#f0b429] capitalize">
