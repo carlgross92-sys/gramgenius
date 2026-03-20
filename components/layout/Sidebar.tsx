@@ -16,6 +16,7 @@ import {
   MessageCircle,
   Handshake,
   Settings,
+  ImageIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +28,7 @@ const navItems = [
   { label: "Swarm Studio", icon: Zap, href: "/swarm", badge: "NEW" },
   { label: "Reel Studio", icon: Film, href: "/reels" },
   { label: "Calendar", icon: Calendar, href: "/calendar" },
+  { label: "Media Library", icon: ImageIcon, href: "/media" },
   { label: "Analytics", icon: BarChart3, href: "/analytics" },
   { label: "Hashtags", icon: Hash, href: "/hashtags" },
   { label: "Competitors", icon: Users, href: "/competitors" },

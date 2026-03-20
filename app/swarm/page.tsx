@@ -40,14 +40,16 @@ const INITIAL_AGENTS: AgentRow[] = [
   { name: "Editor Agent", status: "pending" },
   { name: "Parallel (Hashtags + Visual + CTA)", status: "pending" },
   { name: "Formatter Agent", status: "pending" },
+  { name: "Media Agent", status: "pending" },
 ];
 
-const AGENT_ICONS = [Brain, Target, PenTool, Edit3, Sparkles, Type];
+const AGENT_ICONS = [Brain, Target, PenTool, Edit3, Sparkles, Type, Zap];
 
 export default function SwarmStudioPage() {
   const [topic, setTopic] = useState("");
   const [postType, setPostType] = useState("FEED");
   const [postGoal, setPostGoal] = useState("engagement");
+  const [autoPost, setAutoPost] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [agents, setAgents] = useState<AgentRow[]>(INITIAL_AGENTS);
@@ -82,7 +84,7 @@ export default function SwarmStudioPage() {
       const res = await fetch("/api/swarm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic, postType, postGoal }),
+        body: JSON.stringify({ topic, postType, postGoal, autoPost }),
       });
 
       const data = await res.json();
@@ -190,6 +192,18 @@ export default function SwarmStudioPage() {
                     <SelectItem value="growth">Growth</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="flex items-center justify-between rounded-lg bg-[#0a0a0a] border border-[#1f1f1f] p-3">
+                <div>
+                  <p className="text-sm text-white font-medium">Auto-Post to Instagram</p>
+                  <p className="text-xs text-[#888]">Post immediately after generation</p>
+                </div>
+                <button
+                  onClick={() => setAutoPost(!autoPost)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${autoPost ? "bg-[#f0b429]" : "bg-[#333]"}`}
+                >
+                  <span className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${autoPost ? "translate-x-6" : "translate-x-1"}`} />
+                </button>
               </div>
               <GoldButton onClick={launchSwarm} disabled={loading || !topic.trim()} className="w-full">
                 {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Zap className="h-4 w-4 mr-2" />}
@@ -406,6 +420,50 @@ export default function SwarmStudioPage() {
                       </p>
                     </div>
                   ) : null}
+                </DarkCard>
+              ) : null}
+
+              {/* Media Agent Results */}
+              {(r.generatedImageUrl || (Array.isArray(r.sceneVideos) && (r.sceneVideos as string[]).length > 0)) ? (
+                <DarkCard className="border-[#f0b429]/20">
+                  <h3 className="text-sm font-semibold text-[#f0b429] mb-3">Generated Media</h3>
+                  {r.generatedImageUrl ? (
+                    <img
+                      src={String(r.generatedImageUrl)}
+                      alt="Generated"
+                      className="w-full max-w-sm rounded-lg border border-[#1f1f1f] mb-3"
+                    />
+                  ) : null}
+                  {Array.isArray(r.sceneVideos) && (r.sceneVideos as string[]).length > 0 ? (
+                    <div className="grid grid-cols-3 gap-2 mb-3">
+                      {(r.sceneVideos as string[]).map((url, i) => (
+                        <video key={i} src={url} controls className="w-full rounded-lg border border-[#1f1f1f]" />
+                      ))}
+                    </div>
+                  ) : null}
+                  {r.voiceoverUrl ? (
+                    <div className="mb-3">
+                      <p className="text-xs text-[#888] mb-1">Voiceover</p>
+                      <audio src={String(r.voiceoverUrl)} controls className="w-full" />
+                    </div>
+                  ) : null}
+                  {r.instagramPostId ? (
+                    <div className="flex items-center gap-2 text-sm">
+                      <CheckCircle className="h-4 w-4 text-[#22c55e]" />
+                      <span className="text-[#22c55e]">Posted to Instagram</span>
+                      {r.instagramUrl ? (
+                        <a href={String(r.instagramUrl)} target="_blank" rel="noopener noreferrer" className="text-[#f0b429] underline text-xs">
+                          View Post
+                        </a>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  <div className="flex gap-3 mt-3">
+                    <a href="/media" className="text-[#f0b429] text-xs hover:underline">View in Media Library</a>
+                    <button onClick={() => { setResult(null); setTopic(""); setAgents(INITIAL_AGENTS); }} className="text-[#888] text-xs hover:text-white">
+                      Generate Another
+                    </button>
+                  </div>
                 </DarkCard>
               ) : null}
             </div>

@@ -163,6 +163,25 @@ model CollabProspect {
   createdAt          DateTime @default(now())
 }
 
+model MediaLibrary {
+  id              String   @id @default(cuid())
+  type            String
+  url             String
+  thumbnailUrl    String?
+  topic           String
+  caption         String?
+  hashtags        String?
+  instagramPostId String?
+  instagramUrl    String?
+  postType        String
+  fileSize        Int?
+  duration        Int?
+  width           Int?
+  height          Int?
+  status          String   @default("SAVED")
+  createdAt       DateTime @default(now())
+}
+
 model EngineConfig {
   id              String    @id @default(cuid())
   enabled         Boolean   @default(true)
