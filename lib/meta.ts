@@ -12,36 +12,100 @@ function getIGUserId(): string {
   return id;
 }
 
-export async function verifyToken(): Promise<{
+export async function verifyToken(overrideToken?: string): Promise<{
   valid: boolean;
-  name?: string;
-  id?: string;
-  expiresIn?: number;
+  userId?: string;
+  userName?: string;
+  expiresAt?: number;
+  scopes?: string[];
 }> {
   try {
-    const token = getAccessToken();
-    // Check token debug info
-    const debugRes = await fetch(
-      `${META_BASE}/debug_token?input_token=${token}&access_token=${token}`
-    );
+    const token = overrideToken || getAccessToken();
+
+    const [meRes, debugRes] = await Promise.all([
+      fetch(`${META_BASE}/me?fields=id,name&access_token=${token}`),
+      fetch(
+        `${META_BASE}/debug_token?input_token=${token}&access_token=${token}`
+      ),
+    ]);
+
+    const meData = await meRes.json();
     const debugData = await debugRes.json();
 
-    const meRes = await fetch(
-      `${META_BASE}/me?fields=id,name&access_token=${token}`
-    );
-    const meData = await meRes.json();
+    if (meData.error) {
+      return { valid: false };
+    }
 
     return {
       valid: debugData.data?.is_valid !== false,
-      name: meData.name,
-      id: meData.id,
-      expiresIn: debugData.data?.expires_at
-        ? debugData.data.expires_at - Math.floor(Date.now() / 1000)
-        : undefined,
+      userId: meData.id,
+      userName: meData.name,
+      expiresAt: debugData.data?.expires_at || undefined,
+      scopes: debugData.data?.scopes || [],
     };
   } catch {
     return { valid: false };
   }
+}
+
+export async function discoverInstagramAccount(accessToken: string): Promise<{
+  pageId: string;
+  pageName: string;
+  pageAccessToken: string;
+  igAccountId: string;
+  igUsername: string;
+  igProfilePic: string;
+  igFollowers: number;
+}> {
+  // Fetch all pages the user manages, including linked IG business accounts
+  const res = await fetch(
+    `${META_BASE}/me/accounts?fields=id,name,access_token,instagram_business_account{id,username,profile_picture_url,followers_count}&access_token=${accessToken}`
+  );
+  const data = await res.json();
+
+  if (data.error) {
+    throw new Error(
+      `Facebook API error: ${data.error.message || "Unknown error"}. ` +
+        `Make sure your token has pages_show_list and pages_read_engagement permissions.`
+    );
+  }
+
+  if (!data.data || data.data.length === 0) {
+    throw new Error(
+      "No Facebook Pages found for this account. " +
+        "You need a Facebook Page linked to an Instagram Business or Creator account. " +
+        "Go to your Instagram settings > Account > Switch to Professional Account, " +
+        "then link it to a Facebook Page."
+    );
+  }
+
+  // Find the first page with a linked Instagram Business Account
+  const pageWithIG = data.data.find(
+    (page: { instagram_business_account?: { id: string } }) =>
+      page.instagram_business_account?.id
+  );
+
+  if (!pageWithIG) {
+    const pageNames = data.data
+      .map((p: { name: string }) => p.name)
+      .join(", ");
+    throw new Error(
+      `Found Facebook Page(s) (${pageNames}) but none have a linked Instagram Business Account. ` +
+        "Go to your Facebook Page Settings > Instagram > Connect Account to link your Instagram."
+    );
+  }
+
+  const ig = pageWithIG.instagram_business_account;
+
+  return {
+    pageId: pageWithIG.id,
+    pageName: pageWithIG.name,
+    pageAccessToken: pageWithIG.access_token,
+    igAccountId: ig.id,
+    igUsername: ig.username || "",
+    igProfilePic: ig.profile_picture_url || "",
+    igFollowers: ig.followers_count || 0,
+  };
 }
 
 export async function getInstagramAccount(): Promise<{

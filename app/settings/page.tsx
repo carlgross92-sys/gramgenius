@@ -72,12 +72,20 @@ interface TimeSlot {
   hour: string;
 }
 
+interface DiscoveredAccount {
+  igAccountId: string;
+  igUsername: string | null;
+  igProfilePic: string | null;
+  igFollowers: number;
+  pageId: string;
+  pageName: string;
+}
+
 interface MetaConnection {
   connected: boolean;
-  accountName: string;
-  accountId: string;
-  tokenExpiry: string | null;
-  followers: number;
+  userName: string;
+  pages: { id: string; name: string; hasInstagram: boolean; igUsername: string | null; igFollowers: number | null }[];
+  autoDiscovered: DiscoveredAccount | null;
 }
 
 interface HealthCheck {
@@ -88,7 +96,6 @@ interface HealthCheck {
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("meta");
   const [metaToken, setMetaToken] = useState("");
-  const [metaAccountId, setMetaAccountId] = useState("");
   const [metaConnection, setMetaConnection] = useState<MetaConnection | null>(
     null
   );
@@ -135,27 +142,32 @@ export default function SettingsPage() {
       setConnectionError(null);
       setMetaConnection(null);
 
-      const res = await fetch(
-        `/api/meta/connect?token=${encodeURIComponent(metaToken)}&accountId=${encodeURIComponent(metaAccountId)}`
-      );
+      const res = await fetch("/api/meta/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accessToken: metaToken }),
+      });
 
-      if (res.ok) {
-        const data = await res.json();
+      const data = await res.json();
+
+      if (data.valid) {
         setMetaConnection({
           connected: true,
-          accountName: data.accountName || data.name || "Unknown",
-          accountId: data.accountId || metaAccountId,
-          tokenExpiry: data.tokenExpiry || null,
-          followers: data.followers || 0,
+          userName: data.userName || "Unknown",
+          pages: data.pages || [],
+          autoDiscovered: data.autoDiscovered || null,
         });
+        if (data.error) {
+          // Partial success (token valid but pages had issues)
+          setConnectionError(data.error);
+        }
       } else {
-        const err = await res.json().catch(() => null);
         setConnectionError(
-          err?.error || "Connection failed. Check your token and account ID."
+          data.error || "Connection failed. Check your access token."
         );
       }
     } catch {
-      setConnectionError("Connection failed. Please check your credentials.");
+      setConnectionError("Connection failed. Please check your access token.");
     } finally {
       setTestingConnection(false);
     }
@@ -229,11 +241,6 @@ export default function SettingsPage() {
     }
   }
 
-  const tokenExpiryWarning =
-    metaConnection?.tokenExpiry &&
-    new Date(metaConnection.tokenExpiry).getTime() - Date.now() <
-      7 * 24 * 60 * 60 * 1000;
-
   return (
     <div className="flex flex-col">
       <Header title="Settings" />
@@ -267,14 +274,16 @@ export default function SettingsPage() {
           <TabsContent value="meta" className="mt-6 flex flex-col gap-6">
             <DarkCard>
               <h3 className="mb-4 text-lg font-semibold text-white">
-                Meta / Instagram Connection
+                Connect Instagram
               </h3>
+              <p className="mb-4 text-sm text-[#888]">
+                Just paste your access token below. GramGenius will
+                automatically find your linked Instagram Business Account.
+              </p>
 
               <div className="flex flex-col gap-4">
                 <div className="flex flex-col gap-2">
-                  <Label className="text-[#888888]">
-                    Long-Lived Access Token
-                  </Label>
+                  <Label className="text-[#888888]">Access Token</Label>
                   <Input
                     type="password"
                     value={metaToken}
@@ -284,35 +293,21 @@ export default function SettingsPage() {
                   />
                 </div>
 
-                <div className="flex flex-col gap-2">
-                  <Label className="text-[#888888]">
-                    Instagram Business Account ID
-                  </Label>
-                  <Input
-                    value={metaAccountId}
-                    onChange={(e) => setMetaAccountId(e.target.value)}
-                    className="border-[#1f1f1f] bg-[#1a1a1a] font-mono text-white"
-                    placeholder="17841400..."
-                  />
-                </div>
-
                 <GoldButton
                   onClick={testConnection}
-                  disabled={
-                    testingConnection || !metaToken.trim() || !metaAccountId.trim()
-                  }
+                  disabled={testingConnection || !metaToken.trim()}
                 >
                   {testingConnection ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <Link2 className="h-4 w-4" />
                   )}
-                  Test Connection
+                  Connect Instagram
                 </GoldButton>
 
                 {connectionError && (
-                  <div className="flex items-center gap-2 rounded-lg border border-[#ef4444]/30 bg-[#ef4444]/10 p-3">
-                    <AlertTriangle className="h-4 w-4 shrink-0 text-[#ef4444]" />
+                  <div className="flex items-start gap-2 rounded-lg border border-[#ef4444]/30 bg-[#ef4444]/10 p-3">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[#ef4444]" />
                     <p className="text-sm text-[#ef4444]">{connectionError}</p>
                   </div>
                 )}
@@ -325,74 +320,123 @@ export default function SettingsPage() {
                         Connected
                       </h4>
                     </div>
-                    <div className="mt-3 grid grid-cols-2 gap-3">
-                      <div>
-                        <p className="text-xs text-[#888888]">Account Name</p>
-                        <p className="text-sm font-medium text-white">
-                          {metaConnection.accountName}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-[#888888]">Account ID</p>
-                        <p className="font-mono text-sm text-white">
-                          {metaConnection.accountId}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-[#888888]">Followers</p>
-                        <p className="text-sm font-medium text-white">
-                          {metaConnection.followers.toLocaleString()}
-                        </p>
-                      </div>
-                      {metaConnection.tokenExpiry && (
-                        <div>
-                          <p className="text-xs text-[#888888]">
-                            Token Expires
+
+                    {metaConnection.autoDiscovered && (
+                      <div className="mt-4 flex items-center gap-4">
+                        {metaConnection.autoDiscovered.igProfilePic && (
+                          <img
+                            src={metaConnection.autoDiscovered.igProfilePic}
+                            alt={metaConnection.autoDiscovered.igUsername || "Profile"}
+                            className="h-14 w-14 rounded-full border-2 border-[#f0b429]/30"
+                          />
+                        )}
+                        <div className="flex flex-col gap-1">
+                          <p className="text-lg font-semibold text-white">
+                            @{metaConnection.autoDiscovered.igUsername}
                           </p>
-                          <p
-                            className={`text-sm font-medium ${tokenExpiryWarning ? "text-[#f59e0b]" : "text-white"}`}
-                          >
-                            {new Date(
-                              metaConnection.tokenExpiry
-                            ).toLocaleDateString()}
-                            {tokenExpiryWarning && (
-                              <span className="ml-1 text-xs">
-                                (Expiring soon!)
-                              </span>
-                            )}
+                          <p className="text-sm text-[#888]">
+                            {metaConnection.autoDiscovered.igFollowers.toLocaleString()}{" "}
+                            followers
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="mt-4 grid grid-cols-2 gap-3">
+                      <div>
+                        <p className="text-xs text-[#888888]">Facebook User</p>
+                        <p className="text-sm font-medium text-white">
+                          {metaConnection.userName}
+                        </p>
+                      </div>
+                      {metaConnection.autoDiscovered && (
+                        <>
+                          <div>
+                            <p className="text-xs text-[#888888]">Page</p>
+                            <p className="text-sm font-medium text-white">
+                              {metaConnection.autoDiscovered.pageName}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-[#888888]">IG Account ID</p>
+                            <p className="font-mono text-sm text-white">
+                              {metaConnection.autoDiscovered.igAccountId}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-[#888888]">Followers</p>
+                            <p className="text-sm font-medium text-white">
+                              {metaConnection.autoDiscovered.igFollowers.toLocaleString()}
+                            </p>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {metaConnection.pages.length > 0 &&
+                      !metaConnection.autoDiscovered && (
+                        <div className="mt-4 rounded-lg border border-[#f59e0b]/30 bg-[#f59e0b]/10 p-3">
+                          <p className="text-sm text-[#f59e0b]">
+                            Found {metaConnection.pages.length} Facebook Page(s)
+                            but none have a linked Instagram Business Account.
+                            Link your Instagram to a Facebook Page first.
                           </p>
                         </div>
                       )}
-                    </div>
                   </DarkCard>
                 )}
               </div>
 
               <Separator className="my-6 bg-[#1f1f1f]" />
 
-              {/* Setup Guide */}
+              {/* Setup Instructions */}
               <div className="flex flex-col gap-3">
                 <h4 className="text-sm font-semibold text-[#f0b429]">
-                  Setup Guide
+                  How to get your Access Token
                 </h4>
                 <div className="flex flex-col gap-2">
                   {[
-                    "Create a Meta Developer account at developers.facebook.com",
-                    'Create a new app (type: "Business")',
-                    "Add Instagram Graph API product to your app",
-                    "Generate a User Access Token with instagram_basic and instagram_content_publish permissions",
-                    "Exchange for a Long-Lived Token (60 days)",
-                    "Find your Instagram Business Account ID via the API Explorer",
-                    "Paste both values above and test the connection",
+                    {
+                      text: "Go to ",
+                      link: "developers.facebook.com/tools/explorer",
+                      href: "https://developers.facebook.com/tools/explorer",
+                    },
+                    {
+                      text: "Select your app (or create one with Instagram Graph API)",
+                    },
+                    { text: 'Click "Generate Access Token"' },
+                    {
+                      text: "Select permissions: instagram_basic, instagram_content_publish, pages_show_list, pages_read_engagement",
+                    },
+                    {
+                      text: 'Click "Generate Access Token" and authorize',
+                    },
+                    { text: "Paste the token above" },
                   ].map((step, i) => (
                     <div key={i} className="flex items-start gap-3">
                       <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#f0b429]/15 text-xs font-bold text-[#f0b429]">
                         {i + 1}
                       </span>
-                      <p className="text-sm text-[#cccccc]">{step}</p>
+                      <p className="text-sm text-[#cccccc]">
+                        {step.text}
+                        {step.link && (
+                          <a
+                            href={step.href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[#f0b429] underline hover:text-[#f0b429]/80"
+                          >
+                            {step.link}
+                            <ExternalLink className="ml-1 inline h-3 w-3" />
+                          </a>
+                        )}
+                      </p>
                     </div>
                   ))}
                 </div>
+                <p className="mt-2 text-xs text-[#888]">
+                  For long-lived tokens (60 days), see docs/meta-setup.md
+                </p>
               </div>
             </DarkCard>
           </TabsContent>
