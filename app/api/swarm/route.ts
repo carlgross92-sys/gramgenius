@@ -36,19 +36,20 @@ export async function POST(request: NextRequest) {
     });
 
     // Save the first refined caption as a draft Post
-    const firstCaption = swarmOutput.captions[0]?.text ?? "";
+    const firstCaption = (swarmOutput.captions || [])[0]?.text ?? topic;
+    const hashtagStr = (swarmOutput.hashtags?.fullSet || []).join(" ");
 
     const post = await prisma.post.create({
       data: {
-        topic: topic,
+        topic,
         caption: firstCaption,
-        hashtags: swarmOutput.hashtags.fullSet.join(" "),
-        postType: swarmOutput.strategy.format || postType || "FEED",
-        platform: swarmOutput.strategy.platform || "INSTAGRAM",
+        hashtags: hashtagStr,
+        postType: swarmOutput.strategy?.format || postType || "FEED",
+        platform: swarmOutput.strategy?.platform || "INSTAGRAM",
         status: "DRAFT",
-        brandProfileId: brandProfileId,
-        engagementNotes: JSON.stringify(swarmOutput.swarmMetrics),
-        imagePrompt: swarmOutput.visualConcept.dallePrompt || null,
+        brandProfileId,
+        engagementNotes: JSON.stringify(swarmOutput.swarmMetrics || {}),
+        imagePrompt: swarmOutput.visualConcept?.dallePrompt || null,
       },
     });
 
