@@ -1,14 +1,9 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
-import { useRouter } from "next/navigation";
-import { Header } from "@/components/layout/Header";
+import { useState } from "react";
 import { GoldButton } from "@/components/ui/GoldButton";
 import { DarkCard } from "@/components/ui/DarkCard";
-import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -22,787 +17,401 @@ import {
   Target,
   PenTool,
   Edit3,
-  Hash,
-  Eye,
+  Sparkles,
   Type,
   Loader2,
   CheckCircle,
+  XCircle,
   Clock,
-  Sparkles,
-  Instagram,
-  Facebook,
-  Twitter,
-  Linkedin,
-  Image,
-  CalendarPlus,
-  Save,
 } from "lucide-react";
-import type {
-  SwarmOutput,
-  RefinedCaption,
-  HashtagOutput,
-  CTAOutput,
-  VisualOutput,
-  FormatterOutput,
-  ResearchOutput,
-  StrategyOutput,
-  SwarmMetrics,
-} from "@/lib/swarm-types";
-
-// ─── Types ──────────────────────────────────────────────────────────────────
 
 type AgentStatus = "pending" | "running" | "complete" | "failed";
 
-interface AgentState {
+interface AgentRow {
   name: string;
-  icon: React.ReactNode;
-  statusText: string;
   status: AgentStatus;
   timing?: number;
 }
 
-const AGENT_DEFS: { name: string; icon: React.ReactNode; statusText: string }[] = [
-  { name: "Research Agent", icon: <Brain className="h-4 w-4" />, statusText: "Analyzing trends..." },
-  { name: "Strategy Agent", icon: <Target className="h-4 w-4" />, statusText: "Planning content..." },
-  { name: "Copy Agent", icon: <PenTool className="h-4 w-4" />, statusText: "Writing captions..." },
-  { name: "Editor Agent", icon: <Edit3 className="h-4 w-4" />, statusText: "Refining copy..." },
-  { name: "Parallel Agents", icon: <Sparkles className="h-4 w-4" />, statusText: "Hashtags + Visual + CTA" },
-  { name: "Formatter Agent", icon: <Type className="h-4 w-4" />, statusText: "Packaging for platforms..." },
+const INITIAL_AGENTS: AgentRow[] = [
+  { name: "Research Agent", status: "pending" },
+  { name: "Strategy Agent", status: "pending" },
+  { name: "Copy Agent", status: "pending" },
+  { name: "Editor Agent", status: "pending" },
+  { name: "Parallel (Hashtags + Visual + CTA)", status: "pending" },
+  { name: "Formatter Agent", status: "pending" },
 ];
 
-const TIMING_KEYS = ["Research", "Strategy", "Copy", "Editor", "Hashtag", "Formatter"];
-
-// ─── Component ──────────────────────────────────────────────────────────────
+const AGENT_ICONS = [Brain, Target, PenTool, Edit3, Sparkles, Type];
 
 export default function SwarmStudioPage() {
-  const router = useRouter();
-
-  // ── Form state ──
   const [topic, setTopic] = useState("");
   const [postType, setPostType] = useState("FEED");
   const [postGoal, setPostGoal] = useState("engagement");
-  const [brandProfileId, setBrandProfileId] = useState<string | null>(null);
-  const [brandName, setBrandName] = useState<string>("");
-
-  // ── Loading / results ──
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<(SwarmOutput & { postId: string }) | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState("instagram");
+  const [agents, setAgents] = useState<AgentRow[]>(INITIAL_AGENTS);
+  const [result, setResult] = useState<Record<string, unknown> | null>(null);
 
-  // ── Agent progress ──
-  const [agents, setAgents] = useState<AgentState[]>(
-    AGENT_DEFS.map((a) => ({ ...a, status: "pending" as AgentStatus }))
-  );
-  const progressTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
-
-  // ── Load brand profile on mount ──
-  useEffect(() => {
-    async function loadBrand() {
-      try {
-        const res = await fetch("/api/brand");
-        if (res.ok) {
-          const data = await res.json();
-          if (data.id) {
-            setBrandProfileId(data.id);
-            setBrandName(data.name || data.brandName || "");
-          }
-        }
-      } catch {
-        // silent — brand can be missing
-      }
-    }
-    loadBrand();
-  }, []);
-
-  // ── Simulate agent progress ──
-  const simulateProgress = useCallback(() => {
-    // Clear any existing timers
-    progressTimers.current.forEach(clearTimeout);
-    progressTimers.current = [];
-
-    // Reset all agents to pending
-    setAgents(AGENT_DEFS.map((a) => ({ ...a, status: "pending" as AgentStatus })));
-
-    // Stagger each agent's start: ~2.5s gap per agent
-    const delays = [0, 2500, 5000, 7500, 10000, 14000];
-    delays.forEach((delay, idx) => {
-      const timer = setTimeout(() => {
-        setAgents((prev) =>
-          prev.map((a, i) => {
-            if (i === idx) return { ...a, status: "running" };
-            return a;
-          })
-        );
-      }, delay);
-      progressTimers.current.push(timer);
-    });
-  }, []);
-
-  const finalizeAgents = useCallback((metrics: SwarmMetrics) => {
-    progressTimers.current.forEach(clearTimeout);
-    progressTimers.current = [];
-
-    const timings = metrics.agentTimings;
-    setAgents(
-      AGENT_DEFS.map((def, idx) => {
-        const key = TIMING_KEYS[idx];
-        // For parallel agents, use average of Hashtag + Visual + CTA
-        let timing: number | undefined;
-        if (idx === 4) {
-          const h = timings["Hashtag"] ?? 0;
-          const v = timings["Visual"] ?? 0;
-          const c = timings["CTA"] ?? 0;
-          timing = Math.max(h, v, c);
-        } else {
-          timing = timings[key];
-        }
-        return { ...def, status: "complete" as AgentStatus, timing };
-      })
-    );
-  }, []);
-
-  // ── Launch swarm ──
-  async function handleLaunchSwarm() {
-    if (!topic.trim() || !brandProfileId) return;
-
+  async function launchSwarm() {
+    if (!topic.trim()) return;
     setLoading(true);
-    setResult(null);
     setError(null);
-    simulateProgress();
+    setResult(null);
+    setAgents(INITIAL_AGENTS);
+
+    // Simulate progress
+    const delays = [0, 3000, 6000, 9000, 12000, 16000];
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    for (let i = 0; i < 6; i++) {
+      timers.push(
+        setTimeout(() => {
+          setAgents((prev) =>
+            prev.map((a, idx) => {
+              if (idx === i) return { ...a, status: "running" };
+              if (idx === i - 1 && a.status === "running")
+                return { ...a, status: "complete" };
+              return a;
+            })
+          );
+        }, delays[i])
+      );
+    }
 
     try {
       const res = await fetch("/api/swarm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          topic: topic.trim(),
-          brandProfileId,
-          postType,
-          recentHashtagsUsed: [],
-          postGoal,
-        }),
+        body: JSON.stringify({ topic, postType, postGoal }),
       });
 
+      const data = await res.json();
+      timers.forEach(clearTimeout);
+
       if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || `Swarm failed (${res.status})`);
+        setError(data?.error || "Swarm failed");
+        setAgents((prev) =>
+          prev.map((a) =>
+            a.status === "running" ? { ...a, status: "failed" } : a
+          )
+        );
+        return;
       }
 
-      const data = await res.json();
       setResult(data);
-      finalizeAgents(data.swarmMetrics);
-      setActiveTab("instagram");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "An unknown error occurred";
-      setError(message);
-      // Mark all as failed
-      progressTimers.current.forEach(clearTimeout);
-      setAgents((prev) => prev.map((a) => ({ ...a, status: "failed" })));
+      const timings = (data?.swarmMetrics?.agentTimings || {}) as Record<string, number>;
+      const timingKeys = ["Research", "Strategy", "Copy", "Editor", "Hashtag", "Formatter"];
+      setAgents((prev) =>
+        prev.map((a, i) => ({
+          ...a,
+          status: "complete" as const,
+          timing: timings[timingKeys[i]] || 0,
+        }))
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Swarm failed");
+      setAgents((prev) =>
+        prev.map((a) =>
+          a.status === "running" ? { ...a, status: "failed" } : a
+        )
+      );
     } finally {
       setLoading(false);
     }
   }
 
-  // ── Status indicator ──
-  function StatusDot({ status }: { status: AgentStatus }) {
-    switch (status) {
-      case "pending":
-        return <span className="h-2.5 w-2.5 rounded-full bg-[#333333]" />;
-      case "running":
-        return <Loader2 className="h-4 w-4 animate-spin text-[#f0b429]" />;
-      case "complete":
-        return <CheckCircle className="h-4 w-4 text-emerald-400" />;
-      case "failed":
-        return <span className="h-2.5 w-2.5 rounded-full bg-red-500" />;
-    }
-  }
-
-  // ─── Render ───────────────────────────────────────────────────────────────
+  // Safe accessor helpers
+  const r = result || {};
+  const strategy = (r.strategy || {}) as Record<string, unknown>;
+  const hashtags = (r.hashtags || {}) as Record<string, unknown>;
+  const fullSet = Array.isArray(hashtags.fullSet) ? (hashtags.fullSet as string[]) : [];
+  const warningFlags = Array.isArray(hashtags.warningFlags) ? (hashtags.warningFlags as string[]) : [];
+  const captions = Array.isArray(r.captions) ? (r.captions as Array<Record<string, string>>) : [];
+  const ctas = ((r.ctas || {}) as Record<string, unknown>).ctas;
+  const ctaList = Array.isArray(ctas) ? (ctas as Array<Record<string, string>>) : [];
+  interface PF { formattedCaption?: string; characterCount?: number; platformTips?: string[] }
+  const fmt = (r.formatted || {}) as Record<string, PF>;
+  const visual = (r.visualConcept || {}) as { dallePrompt?: string; colorMood?: string; compositionStyle?: string; visualType?: string };
+  const metrics = (r.swarmMetrics || {}) as { totalMs?: number };
+  const totalMs = metrics.totalMs ?? 0;
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a]">
-      <Header title="Swarm Studio" brandActive={!!brandProfileId} />
-
-      {/* Hero Header */}
-      <div className="border-b border-[#1f1f1f] px-6 py-8">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#f0b429]/10">
-            <Zap className="h-5 w-5 text-[#f0b429]" />
-          </div>
-          <div>
-            <h2 className="text-2xl font-bold text-white">Content Swarm Engine</h2>
-            <p className="text-sm text-[#888888]">
-              6 specialized AI agents working together to create your best content
-            </p>
-          </div>
-        </div>
+    <div className="p-8">
+      <div className="mb-8">
+        <h1 className="flex items-center gap-3 text-3xl font-bold text-white">
+          <Zap className="text-[#f0b429]" />
+          Swarm Studio
+        </h1>
+        <p className="mt-1 text-[#888]">
+          6 specialized AI agents working together to create your best content
+        </p>
       </div>
 
-      {/* Two-Column Layout */}
-      <div className="flex gap-6 p-6">
-        {/* ── Left Panel (40%) ── */}
-        <div className="flex w-[40%] shrink-0 flex-col gap-6">
-          {/* Input Form */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
+        {/* Left Panel */}
+        <div className="lg:col-span-2 flex flex-col gap-6">
           <DarkCard>
-            <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-[#888888]">
-              Swarm Input
-            </h3>
+            <h2 className="mb-4 text-lg font-semibold text-white">Content Swarm Input</h2>
             <div className="flex flex-col gap-4">
-              {/* Topic */}
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-[#888888]">Topic</Label>
+              <div>
+                <label className="mb-1 block text-sm text-[#888]">Topic</label>
                 <Textarea
-                  placeholder="What should the swarm create content about?"
                   value={topic}
                   onChange={(e) => setTopic(e.target.value)}
-                  className="min-h-[80px] border-[#1f1f1f] bg-[#1a1a1a] text-white placeholder:text-[#555555]"
+                  placeholder="What is this content about?"
+                  rows={3}
+                  className="border-[#1f1f1f] bg-[#0a0a0a] text-white"
                 />
               </div>
-
-              {/* Post Type */}
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-[#888888]">Post Type</Label>
-                <Select
-                  value={postType}
-                  onValueChange={(value) => setPostType(value ?? "")}
-                >
-                  <SelectTrigger className="border-[#1f1f1f] bg-[#1a1a1a] text-white">
+              <div>
+                <label className="mb-1 block text-sm text-[#888]">Post Type</label>
+                <Select value={postType} onValueChange={(v) => setPostType(v ?? "FEED")}>
+                  <SelectTrigger className="border-[#1f1f1f] bg-[#0a0a0a] text-white">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="border-[#1f1f1f] bg-[#111111]">
-                    <SelectItem value="FEED" className="text-white">Feed</SelectItem>
-                    <SelectItem value="CAROUSEL" className="text-white">Carousel</SelectItem>
-                    <SelectItem value="REEL" className="text-white">Reel</SelectItem>
-                    <SelectItem value="STORY" className="text-white">Story</SelectItem>
+                  <SelectContent className="border-[#1f1f1f] bg-[#111]">
+                    <SelectItem value="FEED">Feed Post</SelectItem>
+                    <SelectItem value="CAROUSEL">Carousel</SelectItem>
+                    <SelectItem value="REEL">Reel</SelectItem>
+                    <SelectItem value="STORY">Story</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-
-              {/* Post Goal */}
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-[#888888]">Post Goal</Label>
-                <Select
-                  value={postGoal}
-                  onValueChange={(value) => setPostGoal(value ?? "")}
-                >
-                  <SelectTrigger className="border-[#1f1f1f] bg-[#1a1a1a] text-white">
+              <div>
+                <label className="mb-1 block text-sm text-[#888]">Post Goal</label>
+                <Select value={postGoal} onValueChange={(v) => setPostGoal(v ?? "engagement")}>
+                  <SelectTrigger className="border-[#1f1f1f] bg-[#0a0a0a] text-white">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="border-[#1f1f1f] bg-[#111111]">
-                    <SelectItem value="awareness" className="text-white">Awareness</SelectItem>
-                    <SelectItem value="engagement" className="text-white">Engagement</SelectItem>
-                    <SelectItem value="conversion" className="text-white">Conversion</SelectItem>
-                    <SelectItem value="growth" className="text-white">Growth</SelectItem>
+                  <SelectContent className="border-[#1f1f1f] bg-[#111]">
+                    <SelectItem value="awareness">Awareness</SelectItem>
+                    <SelectItem value="engagement">Engagement</SelectItem>
+                    <SelectItem value="conversion">Conversion</SelectItem>
+                    <SelectItem value="growth">Growth</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-
-              {/* Brand indicator */}
-              {brandName && (
-                <p className="text-xs text-[#555555]">
-                  Brand: <span className="text-[#f0b429]">{brandName}</span>
-                </p>
-              )}
-              {!brandProfileId && (
-                <p className="text-xs text-red-400">
-                  No brand profile found. Please set up your brand first.
-                </p>
-              )}
-
-              {/* Launch Button */}
-              <GoldButton
-                onClick={handleLaunchSwarm}
-                disabled={loading || !topic.trim() || !brandProfileId}
-                className="mt-2 w-full"
-              >
-                {loading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Zap className="h-4 w-4" />
-                )}
-                {loading ? "Swarm Running..." : "Launch Swarm"}
+              <GoldButton onClick={launchSwarm} disabled={loading || !topic.trim()} className="w-full">
+                {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Zap className="h-4 w-4 mr-2" />}
+                {loading ? "Running Swarm..." : "Launch Swarm"}
               </GoldButton>
             </div>
           </DarkCard>
 
-          {/* Agent Progress Tracker */}
+          {/* Agent Progress */}
           <DarkCard>
-            <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-[#888888]">
-              Agent Progress
-            </h3>
-            <div className="flex flex-col gap-3">
-              {agents.map((agent, idx) => (
-                <div
-                  key={idx}
-                  className="flex items-center gap-3 rounded-lg border border-[#1a1a1a] bg-[#0d0d0d] px-4 py-3"
-                >
-                  <span
-                    className={
+            <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
+              <Clock className="h-5 w-5 text-[#f0b429]" />
+              Agent Pipeline
+            </h2>
+            <div className="flex flex-col gap-2">
+              {agents.map((agent, i) => {
+                const Icon = AGENT_ICONS[i];
+                return (
+                  <div
+                    key={agent.name}
+                    className={`flex items-center gap-3 rounded-lg p-3 ${
                       agent.status === "running"
-                        ? "text-[#f0b429]"
+                        ? "bg-[#f0b429]/5 border border-[#f0b429]/20"
                         : agent.status === "complete"
-                          ? "text-emerald-400"
-                          : agent.status === "failed"
-                            ? "text-red-400"
-                            : "text-[#444444]"
-                    }
+                        ? "bg-[#22c55e]/5 border border-[#22c55e]/20"
+                        : agent.status === "failed"
+                        ? "bg-[#ef4444]/5 border border-[#ef4444]/20"
+                        : "bg-[#0a0a0a] border border-[#1f1f1f]"
+                    }`}
                   >
-                    {agent.icon}
-                  </span>
-                  <div className="flex flex-1 flex-col">
-                    <span
-                      className={
-                        agent.status === "pending"
-                          ? "text-sm font-medium text-[#555555]"
-                          : "text-sm font-medium text-white"
-                      }
-                    >
+                    <Icon className={`h-4 w-4 ${
+                      agent.status === "complete" ? "text-[#22c55e]" :
+                      agent.status === "running" ? "text-[#f0b429]" : "text-[#555]"
+                    }`} />
+                    <span className={`flex-1 text-sm ${agent.status === "pending" ? "text-[#555]" : "text-white"}`}>
                       {agent.name}
                     </span>
-                    <span className="text-xs text-[#666666]">
-                      {agent.status === "complete" && agent.timing
-                        ? `Done in ${(agent.timing / 1000).toFixed(1)}s`
-                        : agent.status === "running"
-                          ? agent.statusText
-                          : agent.status === "failed"
-                            ? "Failed"
-                            : "Waiting..."}
-                    </span>
+                    {agent.status === "running" && <Loader2 className="h-4 w-4 animate-spin text-[#f0b429]" />}
+                    {agent.status === "complete" && <CheckCircle className="h-4 w-4 text-[#22c55e]" />}
+                    {agent.status === "failed" && <XCircle className="h-4 w-4 text-[#ef4444]" />}
+                    {agent.status === "pending" && <div className="h-4 w-4 rounded-full bg-[#333]" />}
+                    {(agent.timing ?? 0) > 0 && (
+                      <span className="text-xs text-[#888]">{((agent.timing ?? 0) / 1000).toFixed(1)}s</span>
+                    )}
                   </div>
-                  <StatusDot status={agent.status} />
-                </div>
-              ))}
+                );
+              })}
             </div>
           </DarkCard>
         </div>
 
-        {/* ── Right Panel (60%) ── */}
-        <div className="flex flex-1 flex-col gap-6">
-          {/* Error state */}
+        {/* Right Panel */}
+        <div className="lg:col-span-3">
           {error && (
-            <DarkCard className="border-red-500/30">
-              <p className="text-sm text-red-400">{error}</p>
+            <DarkCard className="mb-6 border-[#ef4444]/30">
+              <p className="text-[#ef4444] text-sm">{error}</p>
             </DarkCard>
           )}
 
-          {/* Empty state */}
-          {!result && !loading && !error && (
+          {!result && !loading && (
             <DarkCard className="flex flex-col items-center justify-center py-20">
-              <Zap className="mb-4 h-12 w-12 text-[#222222]" />
-              <p className="text-lg font-medium text-[#333333]">
-                Launch the swarm to see results
-              </p>
-              <p className="mt-1 text-sm text-[#555555]">
-                Enter a topic and click &quot;Launch Swarm&quot;
-              </p>
+              <Zap className="h-16 w-16 text-[#333] mb-4" />
+              <p className="text-[#888] text-center">Enter a topic and launch the swarm to see results</p>
             </DarkCard>
           )}
 
-          {/* Loading state */}
           {loading && !result && (
             <DarkCard className="flex flex-col items-center justify-center py-20">
-              <Loader2 className="mb-4 h-10 w-10 animate-spin text-[#f0b429]" />
-              <p className="text-lg font-medium text-white">Swarm in progress...</p>
-              <p className="mt-1 text-sm text-[#888888]">
-                6 agents are collaborating on your content
-              </p>
+              <Loader2 className="h-12 w-12 animate-spin text-[#f0b429] mb-4" />
+              <p className="text-white font-medium">Swarm is running...</p>
+              <p className="text-[#888] text-sm mt-1">6 agents analyzing, writing, and optimizing</p>
             </DarkCard>
           )}
 
-          {/* Results */}
           {result && (
-            <>
-              <Tabs
-                value={activeTab}
-                onValueChange={(v) => setActiveTab(v as string)}
-              >
-                <TabsList className="bg-[#111111]">
-                  <TabsTrigger value="instagram">
-                    <Instagram className="h-3.5 w-3.5" />
-                    Instagram
-                  </TabsTrigger>
-                  <TabsTrigger value="facebook">
-                    <Facebook className="h-3.5 w-3.5" />
-                    Facebook
-                  </TabsTrigger>
-                  <TabsTrigger value="twitter">
-                    <Twitter className="h-3.5 w-3.5" />
-                    Twitter/X
-                  </TabsTrigger>
-                  <TabsTrigger value="linkedin">
-                    <Linkedin className="h-3.5 w-3.5" />
-                    LinkedIn
-                  </TabsTrigger>
-                  <TabsTrigger value="intelligence">
-                    <Brain className="h-3.5 w-3.5" />
-                    Intelligence
-                  </TabsTrigger>
-                  <TabsTrigger value="visual">
-                    <Eye className="h-3.5 w-3.5" />
-                    Visual
-                  </TabsTrigger>
-                </TabsList>
+            <div className="flex flex-col gap-6">
+              {/* Metrics bar */}
+              <div className="flex items-center gap-2 text-xs text-[#888]">
+                <Clock className="h-3 w-3" />
+                Completed in {(totalMs / 1000).toFixed(1)}s across 6 agents
+                {r.postId ? <span className="ml-2 text-[#22c55e]">Post saved as draft</span> : null}
+              </div>
 
-                {/* Instagram Tab */}
-                <TabsContent value="instagram">
-                  <DarkCard className="mt-4 flex flex-col gap-5">
-                    <div className="flex items-center gap-2">
-                      <Instagram className="h-5 w-5 text-[#f0b429]" />
-                      <h3 className="text-lg font-semibold text-white">Instagram</h3>
-                      {result.formatted.instagram?.characterCount && (
-                        <Badge className="bg-[#1a1a1a] text-[#888888]">
-                          {result.formatted.instagram.characterCount} chars
-                        </Badge>
-                      )}
-                    </div>
-
-                    {/* Caption */}
-                    <div className="rounded-lg border border-[#1f1f1f] bg-[#0d0d0d] p-4">
-                      <p className="whitespace-pre-wrap text-sm leading-relaxed text-white">
-                        {result.formatted.instagram?.formattedCaption ?? ""}
-                      </p>
-                    </div>
-
-                    {/* Hashtags */}
-                    <div>
-                      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#888888]">
-                        Hashtags
-                      </h4>
-                      <div className="flex flex-wrap gap-1.5">
-                        {(result.hashtags?.fullSet || []).map((tag, i) => (
-                          <span
-                            key={i}
-                            className="rounded-full bg-[#f0b429]/10 px-2.5 py-1 text-xs font-medium text-[#f0b429]"
-                          >
-                            #{tag}
-                          </span>
-                        ))}
-                      </div>
-                      {(result.hashtags?.warningFlags || []).length > 0 && (
-                        <p className="mt-2 text-xs text-red-400">
-                          Warnings: {(result.hashtags?.warningFlags || []).join(", ")}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* CTAs */}
-                    <div>
-                      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#888888]">
-                        CTA Options
-                      </h4>
-                      <div className="flex flex-col gap-2">
-                        {(result.ctas?.ctas || []).map((cta, i) => (
-                          <div
-                            key={i}
-                            className="flex items-center gap-3 rounded-lg border border-[#1a1a1a] bg-[#0d0d0d] px-4 py-2.5"
-                          >
-                            <Badge className="bg-[#f0b429]/10 text-[#f0b429] capitalize">
-                              {cta.strength}
-                            </Badge>
-                            <span className="text-sm text-white">{cta.text}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Platform Tips */}
-                    {result.formatted.instagram?.platformTips?.length > 0 && (
-                      <div>
-                        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#888888]">
-                          Platform Tips
-                        </h4>
-                        <ul className="flex flex-col gap-1 text-xs text-[#888888]">
-                          {result.formatted.instagram.platformTips.map((tip, i) => (
-                            <li key={i}>- {tip}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </DarkCard>
-                </TabsContent>
-
-                {/* Facebook Tab */}
-                <TabsContent value="facebook">
-                  <DarkCard className="mt-4 flex flex-col gap-5">
-                    <div className="flex items-center gap-2">
-                      <Facebook className="h-5 w-5 text-[#f0b429]" />
-                      <h3 className="text-lg font-semibold text-white">Facebook</h3>
-                      {result.formatted.facebook?.characterCount && (
-                        <Badge className="bg-[#1a1a1a] text-[#888888]">
-                          {result.formatted.facebook.characterCount} chars
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="rounded-lg border border-[#1f1f1f] bg-[#0d0d0d] p-4">
-                      <p className="whitespace-pre-wrap text-sm leading-relaxed text-white">
-                        {result.formatted.facebook?.formattedCaption ?? ""}
-                      </p>
-                    </div>
-                    {result.formatted.facebook?.platformTips?.length > 0 && (
-                      <ul className="flex flex-col gap-1 text-xs text-[#888888]">
-                        {result.formatted.facebook.platformTips.map((tip, i) => (
-                          <li key={i}>- {tip}</li>
-                        ))}
-                      </ul>
-                    )}
-                  </DarkCard>
-                </TabsContent>
-
-                {/* Twitter Tab */}
-                <TabsContent value="twitter">
-                  <DarkCard className="mt-4 flex flex-col gap-5">
-                    <div className="flex items-center gap-2">
-                      <Twitter className="h-5 w-5 text-[#f0b429]" />
-                      <h3 className="text-lg font-semibold text-white">Twitter / X</h3>
-                      {result.formatted.twitter?.characterCount && (
-                        <Badge className="bg-[#1a1a1a] text-[#888888]">
-                          {result.formatted.twitter.characterCount} chars
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="rounded-lg border border-[#1f1f1f] bg-[#0d0d0d] p-4">
-                      <p className="whitespace-pre-wrap text-sm leading-relaxed text-white">
-                        {result.formatted.twitter?.formattedCaption ?? ""}
-                      </p>
-                    </div>
-                    {result.formatted.twitter?.platformTips?.length > 0 && (
-                      <ul className="flex flex-col gap-1 text-xs text-[#888888]">
-                        {result.formatted.twitter.platformTips.map((tip, i) => (
-                          <li key={i}>- {tip}</li>
-                        ))}
-                      </ul>
-                    )}
-                  </DarkCard>
-                </TabsContent>
-
-                {/* LinkedIn Tab */}
-                <TabsContent value="linkedin">
-                  <DarkCard className="mt-4 flex flex-col gap-5">
-                    <div className="flex items-center gap-2">
-                      <Linkedin className="h-5 w-5 text-[#f0b429]" />
-                      <h3 className="text-lg font-semibold text-white">LinkedIn</h3>
-                      {result.formatted.linkedin?.characterCount && (
-                        <Badge className="bg-[#1a1a1a] text-[#888888]">
-                          {result.formatted.linkedin.characterCount} chars
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="rounded-lg border border-[#1f1f1f] bg-[#0d0d0d] p-4">
-                      <p className="whitespace-pre-wrap text-sm leading-relaxed text-white">
-                        {result.formatted.linkedin?.formattedCaption ?? ""}
-                      </p>
-                    </div>
-                    {result.formatted.linkedin?.platformTips?.length > 0 && (
-                      <ul className="flex flex-col gap-1 text-xs text-[#888888]">
-                        {result.formatted.linkedin.platformTips.map((tip, i) => (
-                          <li key={i}>- {tip}</li>
-                        ))}
-                      </ul>
-                    )}
-                  </DarkCard>
-                </TabsContent>
-
-                {/* Intelligence Tab */}
-                <TabsContent value="intelligence">
-                  <div className="mt-4 flex flex-col gap-4">
-                    {/* Research Insights */}
-                    <DarkCard>
-                      <div className="mb-3 flex items-center gap-2">
-                        <Brain className="h-4 w-4 text-[#f0b429]" />
-                        <h4 className="text-sm font-semibold text-white">Research Insights</h4>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <IntelCard title="Trends" items={result.researchInsights?.trends} />
-                        <IntelCard title="Pain Points" items={result.researchInsights?.audiencePainPoints} />
-                        <IntelCard title="Content Angles" items={result.researchInsights?.contentAngles} />
-                        <IntelCard title="Viral Formats" items={result.researchInsights?.viralFormats} />
-                        <IntelCard title="Emotional Hooks" items={result.researchInsights?.emotionalHooks} />
-                        <IntelCard title="Competitor Gaps" items={result.researchInsights?.competitorGaps} />
-                      </div>
-                    </DarkCard>
-
-                    {/* Strategy */}
-                    <DarkCard>
-                      <div className="mb-3 flex items-center gap-2">
-                        <Target className="h-4 w-4 text-[#f0b429]" />
-                        <h4 className="text-sm font-semibold text-white">Strategy</h4>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3 text-sm">
-                        <div className="rounded-lg bg-[#0d0d0d] p-3">
-                          <span className="text-xs text-[#888888]">Format</span>
-                          <p className="text-white">{result.strategy.format}</p>
-                        </div>
-                        <div className="rounded-lg bg-[#0d0d0d] p-3">
-                          <span className="text-xs text-[#888888]">Platform</span>
-                          <p className="text-white">{result.strategy.platform}</p>
-                        </div>
-                        <div className="rounded-lg bg-[#0d0d0d] p-3">
-                          <span className="text-xs text-[#888888]">Tone</span>
-                          <p className="text-white">{result.strategy.tone}</p>
-                        </div>
-                        <div className="rounded-lg bg-[#0d0d0d] p-3">
-                          <span className="text-xs text-[#888888]">Engagement Score</span>
-                          <p className="text-[#f0b429] font-semibold">{result.strategy.engagementScore}/10</p>
-                        </div>
-                        <div className="col-span-2 rounded-lg bg-[#0d0d0d] p-3">
-                          <span className="text-xs text-[#888888]">Lead Hook</span>
-                          <p className="text-white">{result.strategy.leadHook}</p>
-                        </div>
-                        <div className="col-span-2 rounded-lg bg-[#0d0d0d] p-3">
-                          <span className="text-xs text-[#888888]">Strategy Rationale</span>
-                          <p className="text-white">{result.strategy.strategyRationale}</p>
-                        </div>
-                      </div>
-                    </DarkCard>
-
-                    {/* Editor Notes */}
-                    <DarkCard>
-                      <div className="mb-3 flex items-center gap-2">
-                        <Edit3 className="h-4 w-4 text-[#f0b429]" />
-                        <h4 className="text-sm font-semibold text-white">Editor Notes</h4>
-                      </div>
-                      <div className="flex flex-col gap-3">
-                        {(result.captions || []).map((cap, i) => (
-                          <div key={i} className="rounded-lg bg-[#0d0d0d] p-3">
-                            <div className="mb-1 flex items-center gap-2">
-                              <Badge className="bg-[#f0b429]/10 text-[#f0b429] capitalize">
-                                {cap.type}
-                              </Badge>
-                            </div>
-                            <p className="mb-2 whitespace-pre-wrap text-sm text-white">
-                              {cap.text}
-                            </p>
-                            {cap.editorNotes && (
-                              <p className="border-t border-[#1f1f1f] pt-2 text-xs italic text-[#888888]">
-                                Editor: {cap.editorNotes}
-                              </p>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </DarkCard>
-                  </div>
-                </TabsContent>
-
-                {/* Visual Tab */}
-                <TabsContent value="visual">
-                  <DarkCard className="mt-4 flex flex-col gap-5">
-                    <div className="flex items-center gap-2">
-                      <Eye className="h-5 w-5 text-[#f0b429]" />
-                      <h3 className="text-lg font-semibold text-white">Visual Concept</h3>
-                    </div>
-
-                    {/* DALL-E Prompt */}
-                    <div>
-                      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#888888]">
-                        DALL-E Prompt
-                      </h4>
-                      <div className="rounded-lg border border-[#1f1f1f] bg-[#0d0d0d] p-4 font-mono text-sm leading-relaxed text-[#f0b429]">
-                        {result.visualConcept.dallePrompt}
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="rounded-lg bg-[#0d0d0d] p-3">
-                        <span className="text-xs text-[#888888]">Color Mood</span>
-                        <p className="text-sm text-white">{result.visualConcept.colorMood}</p>
-                      </div>
-                      <div className="rounded-lg bg-[#0d0d0d] p-3">
-                        <span className="text-xs text-[#888888]">Composition</span>
-                        <p className="text-sm text-white">{result.visualConcept.compositionStyle}</p>
-                      </div>
-                      <div className="rounded-lg bg-[#0d0d0d] p-3">
-                        <span className="text-xs text-[#888888]">Visual Type</span>
-                        <p className="text-sm text-white">{result.visualConcept.visualType}</p>
-                      </div>
-                    </div>
-
-                    {result.visualConcept.reelSceneCount > 0 && (
-                      <p className="text-xs text-[#888888]">
-                        Reel Scenes: {result.visualConcept.reelSceneCount}
-                      </p>
-                    )}
-                  </DarkCard>
-                </TabsContent>
-              </Tabs>
-
-              {/* Bottom Action Bar */}
-              <DarkCard className="flex flex-col gap-4">
-                <div className="flex items-center gap-3">
-                  <GoldButton
-                    onClick={() =>
-                      router.push(
-                        `/create?imagePrompt=${encodeURIComponent(result.visualConcept.dallePrompt)}`
-                      )
-                    }
-                  >
-                    <Image className="h-4 w-4" />
-                    Generate Image
-                  </GoldButton>
-
-                  <GoldButton
-                    variant="secondary"
-                    onClick={() => router.push("/calendar")}
-                  >
-                    <CalendarPlus className="h-4 w-4" />
-                    Schedule This Post
-                  </GoldButton>
-
-                  <GoldButton
-                    variant="secondary"
-                    onClick={async () => {
-                      try {
-                        // Post is already saved during swarm — just confirm
-                        alert(`All versions saved! Post ID: ${result.postId}`);
-                      } catch {
-                        alert("Failed to save.");
-                      }
-                    }}
-                  >
-                    <Save className="h-4 w-4" />
-                    Save All Versions
-                  </GoldButton>
+              {/* Instagram Caption */}
+              <DarkCard>
+                <h3 className="text-lg font-semibold text-white mb-3">Instagram Caption</h3>
+                <div className="whitespace-pre-wrap rounded-lg bg-[#0a0a0a] p-4 text-white text-sm border border-[#1f1f1f] mb-4">
+                  {fmt.instagram?.formattedCaption || captions[0]?.text || "No caption generated"}
                 </div>
+                {fmt.instagram?.characterCount ? (
+                  <p className="text-xs text-[#888] mb-3">{fmt.instagram.characterCount} chars</p>
+                ) : null}
+              </DarkCard>
 
-                {/* Swarm Metrics */}
-                <div className="flex items-center gap-4 border-t border-[#1f1f1f] pt-3">
-                  <div className="flex items-center gap-1.5">
-                    <Clock className="h-3.5 w-3.5 text-[#f0b429]" />
-                    <span className="text-xs font-medium text-white">
-                      Completed in {(result.swarmMetrics.totalMs / 1000).toFixed(1)}s across 6 agents
-                    </span>
-                  </div>
+              {/* Hashtags */}
+              {fullSet.length > 0 && (
+                <DarkCard>
+                  <h3 className="text-sm font-semibold text-[#f0b429] mb-3">Hashtags ({fullSet.length})</h3>
                   <div className="flex flex-wrap gap-2">
-                    {Object.entries(result.swarmMetrics.agentTimings).map(([name, ms]) => (
-                      <span key={name} className="text-xs text-[#555555]">
-                        {name}: {(ms / 1000).toFixed(1)}s
+                    {fullSet.map((tag, i) => (
+                      <span key={i} className="rounded-full bg-[#f0b429]/10 px-2 py-1 text-xs text-[#f0b429]">
+                        #{tag}
                       </span>
                     ))}
                   </div>
+                  {warningFlags.length > 0 && (
+                    <p className="mt-2 text-xs text-[#ef4444]">Warnings: {warningFlags.join(", ")}</p>
+                  )}
+                </DarkCard>
+              )}
+
+              {/* CTAs */}
+              {ctaList.length > 0 && (
+                <DarkCard>
+                  <h3 className="text-sm font-semibold text-[#f0b429] mb-3">Call-to-Action Options</h3>
+                  {ctaList.map((cta, i) => (
+                    <div key={i} className="flex items-center gap-3 rounded-lg bg-[#0a0a0a] p-3 border border-[#1f1f1f] mb-2">
+                      <span className="rounded-full bg-[#f0b429]/10 px-2 py-0.5 text-xs text-[#f0b429] capitalize">
+                        {cta.strength || "cta"}
+                      </span>
+                      <span className="text-white text-sm">{cta.text || ""}</span>
+                    </div>
+                  ))}
+                </DarkCard>
+              )}
+
+              {/* Strategy */}
+              <DarkCard>
+                <h3 className="text-sm font-semibold text-[#f0b429] mb-3">Strategy</h3>
+                <div className="grid grid-cols-3 gap-3 mb-3">
+                  <div className="rounded-lg bg-[#0a0a0a] p-3 border border-[#1f1f1f]">
+                    <p className="text-xs text-[#888]">Format</p>
+                    <p className="text-white text-sm">{String(strategy.format ?? "—")}</p>
+                  </div>
+                  <div className="rounded-lg bg-[#0a0a0a] p-3 border border-[#1f1f1f]">
+                    <p className="text-xs text-[#888]">Tone</p>
+                    <p className="text-white text-sm">{String(strategy.tone || "—")}</p>
+                  </div>
+                  <div className="rounded-lg bg-[#0a0a0a] p-3 border border-[#1f1f1f]">
+                    <p className="text-xs text-[#888]">Engagement</p>
+                    <p className="text-[#f0b429] text-sm font-bold">{String(strategy.engagementScore || "—")}/10</p>
+                  </div>
                 </div>
+                <p className="text-[#888] text-xs">{String(strategy.strategyRationale || "")}</p>
               </DarkCard>
-            </>
+
+              {/* Captions */}
+              {captions.length > 0 && (
+                <DarkCard>
+                  <h3 className="text-sm font-semibold text-[#f0b429] mb-3">Caption Variations</h3>
+                  {captions.map((cap, i) => (
+                    <div key={i} className="mb-3 rounded-lg bg-[#0a0a0a] p-3 border border-[#1f1f1f]">
+                      <span className="rounded-full bg-[#f0b429]/10 px-2 py-0.5 text-xs text-[#f0b429] mb-2 inline-block">
+                        {cap.type || `Variation ${i + 1}`}
+                      </span>
+                      <p className="text-white text-sm whitespace-pre-wrap">{cap.text || ""}</p>
+                      {cap.editorNotes && (
+                        <p className="text-[#888] text-xs mt-2 italic">Editor: {cap.editorNotes}</p>
+                      )}
+                    </div>
+                  ))}
+                </DarkCard>
+              )}
+
+              {/* Visual Concept */}
+              {visual.dallePrompt ? (
+                <DarkCard>
+                  <h3 className="text-sm font-semibold text-[#f0b429] mb-3">Visual Concept</h3>
+                  <div className="rounded-lg bg-[#0a0a0a] p-4 text-white text-sm border border-[#f0b429]/20 font-mono mb-3">
+                    {visual.dallePrompt}
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="rounded-lg bg-[#0a0a0a] p-3 border border-[#1f1f1f]">
+                      <p className="text-xs text-[#888]">Color Mood</p>
+                      <p className="text-white text-sm">{visual.colorMood || "—"}</p>
+                    </div>
+                    <div className="rounded-lg bg-[#0a0a0a] p-3 border border-[#1f1f1f]">
+                      <p className="text-xs text-[#888]">Composition</p>
+                      <p className="text-white text-sm">{visual.compositionStyle || "—"}</p>
+                    </div>
+                    <div className="rounded-lg bg-[#0a0a0a] p-3 border border-[#1f1f1f]">
+                      <p className="text-xs text-[#888]">Type</p>
+                      <p className="text-white text-sm">{visual.visualType || "—"}</p>
+                    </div>
+                  </div>
+                </DarkCard>
+              ) : null}
+
+              {/* Other Platforms */}
+              {(fmt.facebook?.formattedCaption || fmt.twitter?.formattedCaption || fmt.linkedin?.formattedCaption) ? (
+                <DarkCard>
+                  <h3 className="text-sm font-semibold text-[#f0b429] mb-3">Other Platforms</h3>
+                  {fmt.facebook?.formattedCaption ? (
+                    <div className="mb-3">
+                      <p className="text-xs text-[#888] mb-1">Facebook</p>
+                      <p className="text-white text-sm whitespace-pre-wrap bg-[#0a0a0a] p-3 rounded-lg border border-[#1f1f1f]">
+                        {fmt.facebook.formattedCaption}
+                      </p>
+                    </div>
+                  ) : null}
+                  {fmt.twitter?.formattedCaption ? (
+                    <div className="mb-3">
+                      <p className="text-xs text-[#888] mb-1">Twitter/X</p>
+                      <p className="text-white text-sm whitespace-pre-wrap bg-[#0a0a0a] p-3 rounded-lg border border-[#1f1f1f]">
+                        {fmt.twitter.formattedCaption}
+                      </p>
+                    </div>
+                  ) : null}
+                  {fmt.linkedin?.formattedCaption ? (
+                    <div>
+                      <p className="text-xs text-[#888] mb-1">LinkedIn</p>
+                      <p className="text-white text-sm whitespace-pre-wrap bg-[#0a0a0a] p-3 rounded-lg border border-[#1f1f1f]">
+                        {fmt.linkedin.formattedCaption}
+                      </p>
+                    </div>
+                  ) : null}
+                </DarkCard>
+              ) : null}
+            </div>
           )}
         </div>
       </div>
-    </div>
-  );
-}
-
-// ─── Sub-Components ────────────────────────────────────────────────────────
-
-function IntelCard({ title, items }: { title: string; items: string[] }) {
-  return (
-    <div className="rounded-lg bg-[#0d0d0d] p-3">
-      <span className="mb-1.5 block text-xs font-semibold text-[#888888]">{title}</span>
-      <ul className="flex flex-col gap-1">
-        {(items ?? []).map((item, i) => (
-          <li key={i} className="text-xs text-white">
-            - {item}
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }
