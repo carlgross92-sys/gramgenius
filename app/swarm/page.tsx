@@ -103,9 +103,9 @@ export default function SwarmStudioPage() {
         const res = await fetch("/api/brand");
         if (res.ok) {
           const data = await res.json();
-          if (data.brand) {
-            setBrandProfileId(data.brand.id);
-            setBrandName(data.brand.name);
+          if (data.id) {
+            setBrandProfileId(data.id);
+            setBrandName(data.name || data.brandName || "");
           }
         }
       } catch {

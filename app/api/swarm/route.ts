@@ -5,14 +5,26 @@ import { runContentSwarm, type SwarmInput } from "@/lib/swarm";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { topic, brandProfileId, postType, recentHashtagsUsed, postGoal } =
+    let { topic, brandProfileId, postType, recentHashtagsUsed, postGoal } =
       body as SwarmInput;
 
-    if (!topic || !brandProfileId) {
+    if (!topic) {
       return Response.json(
-        { error: "Missing required fields: topic, brandProfileId" },
+        { error: "Missing required field: topic" },
         { status: 400 }
       );
+    }
+
+    // Single-user app: fallback to first brand profile if not specified
+    if (!brandProfileId) {
+      const defaultBrand = await prisma.brandProfile.findFirst();
+      if (!defaultBrand) {
+        return Response.json(
+          { error: "No brand profile found. Set up your Brand Brain first." },
+          { status: 400 }
+        );
+      }
+      brandProfileId = defaultBrand.id;
     }
 
     const swarmOutput = await runContentSwarm({
