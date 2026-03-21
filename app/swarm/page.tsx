@@ -273,6 +273,9 @@ export default function SwarmStudioPage() {
               })}
             </div>
           </DarkCard>
+
+          {/* Continuous Mode */}
+          <ContinuousMode />
         </div>
 
         {/* Right Panel */}
@@ -541,5 +544,175 @@ export default function SwarmStudioPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// ─── Continuous Mode Component ──────────────────────────────────────────────
+
+function ContinuousMode() {
+  const [enabled, setEnabled] = useState(false);
+  const [theme, setTheme] = useState("");
+  const [postsPerDay, setPostsPerDay] = useState(3);
+  const [contMediaType, setContMediaType] = useState<"image" | "video" | "both">("image");
+  const [schedule, setSchedule] = useState<"immediate" | "scheduled" | "queue">("queue");
+  const [running, setRunning] = useState(false);
+  const [progress, setProgress] = useState<{
+    total: number;
+    succeeded: number;
+    failed: number;
+    results: Array<{ topic: string; status: string; imageUrl?: string; errors: string[] }>;
+  } | null>(null);
+
+  async function startContinuous() {
+    setRunning(true);
+    setProgress(null);
+    try {
+      const res = await fetch("/api/auto/continuous", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ theme: theme || undefined, postsPerDay, mediaType: contMediaType, schedule }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        setProgress({ total: 0, succeeded: 0, failed: 1, results: [{ topic: "", status: "failed", errors: [data.error] }] });
+      } else {
+        setProgress(data);
+      }
+    } catch (e) {
+      setProgress({ total: 0, succeeded: 0, failed: 1, results: [{ topic: "", status: "failed", errors: [e instanceof Error ? e.message : "Failed"] }] });
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  if (!enabled) {
+    return (
+      <DarkCard>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">🔄</span>
+            <div>
+              <p className="text-sm font-medium text-white">Continuous Mode</p>
+              <p className="text-xs text-[#888]">Auto-create content based on theme</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setEnabled(true)}
+            className="rounded-full bg-[#333] px-3 py-1 text-xs text-[#888] hover:text-white"
+          >
+            Enable
+          </button>
+        </div>
+      </DarkCard>
+    );
+  }
+
+  return (
+    <DarkCard className="border-[#f0b429]/20">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">🔄</span>
+          <h3 className="text-sm font-semibold text-[#f0b429]">CONTINUOUS MODE</h3>
+        </div>
+        <button
+          onClick={() => setEnabled(false)}
+          className="rounded-full bg-[#f0b429] px-3 py-1 text-xs font-bold text-black"
+        >
+          ON
+        </button>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <div>
+          <label className="mb-1 block text-xs text-[#888]">Theme (optional)</label>
+          <input
+            value={theme}
+            onChange={(e) => setTheme(e.target.value)}
+            placeholder='e.g. "funny dogs" or leave blank for auto'
+            className="w-full rounded-lg border border-[#1f1f1f] bg-[#0a0a0a] px-3 py-2 text-sm text-white placeholder:text-[#555]"
+          />
+        </div>
+
+        <div className="flex gap-4">
+          <div className="flex-1">
+            <label className="mb-1 block text-xs text-[#888]">Posts ({postsPerDay})</label>
+            <input
+              type="range" min={1} max={7} value={postsPerDay}
+              onChange={(e) => setPostsPerDay(Number(e.target.value))}
+              className="w-full accent-[#f0b429]"
+            />
+          </div>
+          <div className="flex-1">
+            <label className="mb-1 block text-xs text-[#888]">Media</label>
+            <div className="flex gap-1">
+              {(["image", "video", "both"] as const).map((t) => (
+                <button key={t} onClick={() => setContMediaType(t)}
+                  className={`rounded px-2 py-1 text-xs capitalize ${contMediaType === t ? "bg-[#f0b429]/20 text-[#f0b429]" : "bg-[#0a0a0a] text-[#888]"}`}
+                >{t}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label className="mb-1 block text-xs text-[#888]">Schedule</label>
+          <div className="flex flex-col gap-1">
+            {(["immediate", "scheduled", "queue"] as const).map((s) => (
+              <label key={s} className="flex items-center gap-2 text-sm text-white cursor-pointer">
+                <input
+                  type="radio" name="schedule" checked={schedule === s}
+                  onChange={() => setSchedule(s)}
+                  className="accent-[#f0b429]"
+                />
+                {s === "immediate" ? "Post immediately" : s === "scheduled" ? "Schedule at best times" : "Add to queue"}
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <GoldButton onClick={startContinuous} disabled={running} className="w-full">
+          {running ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Zap className="h-4 w-4 mr-2" />}
+          {running ? `Creating ${postsPerDay} posts...` : "Start Continuous Mode"}
+        </GoldButton>
+
+        {/* Progress */}
+        {running && (
+          <div className="rounded-lg bg-[#0a0a0a] p-3 border border-[#1f1f1f]">
+            <div className="flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin text-[#f0b429]" />
+              <span className="text-sm text-white">Generating content...</span>
+            </div>
+            <p className="text-xs text-[#888] mt-1">This may take several minutes for {postsPerDay} posts</p>
+          </div>
+        )}
+
+        {/* Results */}
+        {progress && !running && (
+          <div className="rounded-lg bg-[#0a0a0a] p-3 border border-[#1f1f1f]">
+            <div className="flex items-center gap-2 mb-2">
+              <CheckCircle className="h-4 w-4 text-[#22c55e]" />
+              <span className="text-sm text-white">
+                {progress.succeeded}/{progress.total} posts created
+              </span>
+            </div>
+            <div className="flex flex-col gap-2 max-h-48 overflow-y-auto">
+              {(progress.results || []).map((r, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  {r.imageUrl ? (
+                    <img src={r.imageUrl} alt="" className="h-8 w-8 rounded object-cover" />
+                  ) : (
+                    <div className="h-8 w-8 rounded bg-[#1f1f1f]" />
+                  )}
+                  <span className="flex-1 text-xs text-white truncate">{r.topic}</span>
+                  <span className={`text-xs ${r.status === "failed" ? "text-[#ef4444]" : "text-[#22c55e]"}`}>
+                    {r.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </DarkCard>
   );
 }
