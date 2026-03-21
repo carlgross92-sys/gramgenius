@@ -313,45 +313,80 @@ export default function SwarmStudioPage() {
               {/* Media Agent Status */}
               {(() => {
                 const ms = (r.mediaStatus || {}) as Record<string, unknown>;
-                const errs = Array.isArray(r.mediaErrors) ? (r.mediaErrors as string[]) : [];
+                const errs = Array.isArray(ms.errors) ? (ms.errors as string[]) : (Array.isArray(r.mediaErrors) ? (r.mediaErrors as string[]) : []);
+                const warnings = Array.isArray(ms.warnings) ? (ms.warnings as string[]) : [];
+                const hasVideo = !!ms.videoUrl || !!(r.generatedImageUrl);
                 return (
-                  <DarkCard className={errs.length > 0 ? "border-[#f59e0b]/30" : "border-[#22c55e]/30"}>
-                    <h3 className="text-sm font-semibold text-[#f0b429] mb-2">Media Agent</h3>
-                    <div className="flex flex-col gap-1 text-sm">
-                      {ms.imageGenerated ? (
+                  <DarkCard className={errs.length > 0 && !hasVideo ? "border-[#ef4444]/30" : "border-[#22c55e]/30"}>
+                    <h3 className="text-sm font-semibold text-[#f0b429] mb-3">Media Agent Results</h3>
+                    <div className="flex flex-col gap-2 text-sm">
+                      {ms.videoUrl ? (
                         <div className="flex items-center gap-2 text-[#22c55e]">
-                          <CheckCircle className="h-3 w-3" /> Generated image
+                          <CheckCircle className="h-3 w-3" /> Found real {String(ms.videoSource || "animal")} video
+                          {ms.videoDuration ? <span className="text-[#888] text-xs ml-1">({String(ms.videoDuration)}s)</span> : null}
                         </div>
                       ) : null}
-                      {(ms.scenesGenerated as number) > 0 ? (
-                        <div className="flex items-center gap-2 text-[#22c55e]">
-                          <CheckCircle className="h-3 w-3" /> Generated {String(ms.scenesGenerated)} scene images
+                      {ms.photographer ? (
+                        <div className="text-[#888] text-xs ml-5">
+                          Video by {String(ms.photographer)} on Pexels
                         </div>
                       ) : null}
-                      {(ms.videosGenerated as number) > 0 ? (
+                      {ms.imageUrl || r.generatedImageUrl ? (
                         <div className="flex items-center gap-2 text-[#22c55e]">
-                          <CheckCircle className="h-3 w-3" /> Generated {String(ms.videosGenerated)} scene videos (Runway ML)
+                          <CheckCircle className="h-3 w-3" /> Generated thumbnail image (DALL-E)
                         </div>
                       ) : null}
-                      {ms.voiceoverGenerated ? (
+                      {ms.voiceoverUrl ? (
                         <div className="flex items-center gap-2 text-[#22c55e]">
                           <CheckCircle className="h-3 w-3" /> Generated voiceover (ElevenLabs)
                         </div>
                       ) : null}
-                      {ms.postedToInstagram ? (
+                      {ms.instagramPostId ? (
                         <div className="flex items-center gap-2 text-[#22c55e]">
                           <CheckCircle className="h-3 w-3" /> Posted to Instagram
+                          {ms.instagramUrl ? (
+                            <a href={String(ms.instagramUrl)} target="_blank" rel="noopener noreferrer" className="text-[#f0b429] underline text-xs ml-1">View</a>
+                          ) : null}
+                        </div>
+                      ) : ms.instagramError ? (
+                        <div className="flex items-center gap-2 text-[#f59e0b]">
+                          <XCircle className="h-3 w-3" /> {String(ms.instagramError)}
                         </div>
                       ) : null}
+                      {warnings.map((w, i) => (
+                        <div key={`w${i}`} className="flex items-center gap-2 text-[#f59e0b]">
+                          <span className="text-xs">⚠️</span> {w}
+                        </div>
+                      ))}
                       {errs.map((err, i) => (
-                        <div key={i} className="flex items-center gap-2 text-[#ef4444]">
+                        <div key={`e${i}`} className="flex items-center gap-2 text-[#ef4444]">
                           <XCircle className="h-3 w-3" /> {err}
                         </div>
                       ))}
-                      {!ms.imageGenerated && !ms.scenesGenerated && errs.length === 0 ? (
-                        <div className="text-[#888] text-xs">No media generated</div>
-                      ) : null}
                     </div>
+
+                    {/* Video preview */}
+                    {ms.videoUrl ? (
+                      <div className="mt-3">
+                        <video src={String(ms.videoUrl)} controls className="w-full max-w-sm rounded-lg border border-[#1f1f1f]" />
+                      </div>
+                    ) : null}
+
+                    {/* Image preview */}
+                    {!ms.videoUrl && (ms.imageUrl || r.generatedImageUrl) ? (
+                      <div className="mt-3">
+                        <img src={String(ms.imageUrl || r.generatedImageUrl)} alt="Generated" className="w-full max-w-sm rounded-lg border border-[#1f1f1f]" />
+                      </div>
+                    ) : null}
+
+                    {/* Voiceover preview */}
+                    {ms.voiceoverUrl ? (
+                      <div className="mt-3">
+                        <p className="text-xs text-[#888] mb-1">Voiceover</p>
+                        <audio src={String(ms.voiceoverUrl)} controls className="w-full" />
+                        {ms.voiceoverScript ? <p className="text-xs text-[#888] mt-1 italic">&quot;{String(ms.voiceoverScript)}&quot;</p> : null}
+                      </div>
+                    ) : null}
                   </DarkCard>
                 );
               })()}

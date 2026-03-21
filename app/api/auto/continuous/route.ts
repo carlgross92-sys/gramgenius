@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
             postId: post.id,
           });
 
-          entry.imageUrl = mediaResult.imageUrl || (mediaResult.sceneImages || [])[0];
+          entry.imageUrl = mediaResult.imageUrl || mediaResult.videoUrl || mediaResult.thumbnailUrl;
           if (mediaResult.errors?.length) {
             entry.errors.push(...mediaResult.errors);
           }

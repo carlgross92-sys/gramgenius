@@ -63,13 +63,20 @@ export async function POST(request: NextRequest) {
     // Run Media Agent (image/video generation + optional Instagram posting)
     let mediaResult: {
       imageUrl?: string;
-      sceneImages?: string[];
-      sceneVideos?: string[];
+      videoUrl?: string;
+      thumbnailUrl?: string;
       voiceoverUrl?: string;
+      voiceoverScript?: string;
+      videoDuration?: number;
+      videoSource?: string;
+      photographer?: string;
+      pexelsUrl?: string;
       instagramPostId?: string;
       instagramUrl?: string;
+      instagramError?: string;
       mediaLibraryIds?: string[];
       errors?: string[];
+      warnings?: string[];
     } = {};
 
     try {
@@ -104,17 +111,22 @@ export async function POST(request: NextRequest) {
       postType: effectivePostType,
       imageGenerated: !!mediaResult.imageUrl,
       imageUrl: mediaResult.imageUrl || null,
-      scenesGenerated: (mediaResult.sceneImages || []).length,
-      sceneImages: mediaResult.sceneImages || [],
-      videosGenerated: (mediaResult.sceneVideos || []).length,
-      sceneVideos: mediaResult.sceneVideos || [],
+      videoUrl: mediaResult.videoUrl || null,
+      thumbnailUrl: mediaResult.thumbnailUrl || null,
       voiceoverGenerated: !!mediaResult.voiceoverUrl,
       voiceoverUrl: mediaResult.voiceoverUrl || null,
+      voiceoverScript: mediaResult.voiceoverScript || null,
+      videoDuration: mediaResult.videoDuration || null,
+      videoSource: mediaResult.videoSource || null,
+      photographer: mediaResult.photographer || null,
+      pexelsUrl: mediaResult.pexelsUrl || null,
       postedToInstagram: !!mediaResult.instagramPostId,
       instagramPostId: mediaResult.instagramPostId || null,
       instagramUrl: mediaResult.instagramUrl || null,
+      instagramError: mediaResult.instagramError || null,
       mediaLibraryIds: mediaResult.mediaLibraryIds || [],
       errors: mediaResult.errors || [],
+      warnings: mediaResult.warnings || [],
     };
 
     console.log("[Swarm] Media Agent result:", JSON.stringify(mediaStatus, null, 2));
@@ -123,8 +135,7 @@ export async function POST(request: NextRequest) {
       ...swarmOutput,
       postId: post.id,
       generatedImageUrl: mediaStatus.imageUrl,
-      sceneImages: mediaStatus.sceneImages,
-      sceneVideos: mediaStatus.sceneVideos,
+      generatedVideoUrl: mediaStatus.videoUrl,
       voiceoverUrl: mediaStatus.voiceoverUrl,
       instagramPostId: mediaStatus.instagramPostId,
       instagramUrl: mediaStatus.instagramUrl,

@@ -173,12 +173,16 @@ model MediaLibrary {
   hashtags        String?
   instagramPostId String?
   instagramUrl    String?
-  postType        String
+  postType        String   @default("FEED")
   fileSize        Int?
   duration        Int?
   width           Int?
   height          Int?
   status          String   @default("SAVED")
+  videoSource     String?
+  photographer    String?
+  pexelsUrl       String?
+  voiceoverUrl    String?
   createdAt       DateTime @default(now())
 }
 
