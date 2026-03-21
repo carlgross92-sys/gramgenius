@@ -164,3 +164,10 @@
   scrollbar-width: thin;
   scrollbar-color: #333333 #0a0a0a;
 }
+
+/* Mobile touch targets and text sizing */
+@media (max-width: 1024px) {
+  input, select, textarea {
+    font-size: 16px !important; /* prevents zoom on iOS */
+  }
+}

@@ -19,6 +19,7 @@ export interface MediaAgentInput {
   topic: string;
   caption: string;
   hashtags: string[];
+  subject?: string;
   visualConcept: {
     dallePrompt: string;
     colorMood?: string;
@@ -111,7 +112,23 @@ export async function generateFeedMedia(
   try {
     // 1. Enhance the DALL-E prompt via Claude
     const enhancedPrompt = await generateWithClaude(
-      "You are a DALL-E prompt engineer. Enhance the given prompt to be photorealistic, cinematic, with funny animals context, vibrant colors. Never include text in the image. Keep the final prompt under 900 characters. Return ONLY the enhanced prompt text, nothing else.",
+      `You are a DALL-E prompt writer for funny animal Instagram content.
+
+The user's topic is: "${input.topic}"
+${input.subject ? `The REQUIRED subject is: "${input.subject}" — this MUST be the main subject.` : "Extract the EXACT animal/subject from the topic."}
+
+Rules:
+- The animal/subject in the image MUST match the topic exactly
+- If topic mentions "dog" → image MUST show a DOG
+- If topic mentions "cat" → image MUST show a CAT
+- Make it funny, expressive, cinematic
+- Photo-realistic style
+- No text, no words, no letters in the image
+- Portrait orientation
+- Single clear subject, vibrant colors
+- Studio or natural lighting
+
+Return ONLY the enhanced DALL-E prompt, nothing else.`,
       `Enhance this DALL-E prompt: "${input.visualConcept.dallePrompt}"${
         input.visualConcept.colorMood
           ? ` Color mood: ${input.visualConcept.colorMood}.`
@@ -124,7 +141,15 @@ export async function generateFeedMedia(
       1024
     );
 
-    const finalPrompt = enhancedPrompt.slice(0, 900);
+    let finalPrompt = enhancedPrompt.slice(0, 900);
+
+    // Safety check: ensure the animal/subject is in the prompt
+    const animalMatch = (input.subject || input.topic).toLowerCase();
+    const animals = ['dog', 'cat', 'puppy', 'kitten', 'bird', 'hamster', 'rabbit', 'fish', 'turtle', 'parrot', 'horse', 'cow', 'pig', 'duck', 'chicken', 'monkey', 'bear', 'deer', 'fox', 'owl', 'penguin', 'elephant', 'lion', 'tiger', 'giraffe', 'golden retriever', 'labrador', 'poodle', 'bulldog', 'corgi', 'husky', 'chihuahua', 'beagle'];
+    const foundAnimal = animals.find(a => animalMatch.includes(a));
+    if (foundAnimal && !finalPrompt.toLowerCase().includes(foundAnimal)) {
+      finalPrompt = `A ${foundAnimal}, ${finalPrompt}`;
+    }
 
     // 2. Generate image — already saves to Vercel Blob
     const { imageUrl, revisedPrompt } = await generateImage(
@@ -235,8 +260,14 @@ Return ONLY valid JSON, no markdown, no code blocks.`,
 
     for (const scene of scenes) {
       try {
-        // 2a. Generate image for this scene
-        const scenePrompt = `${scene.visualDescription} funny animals, cinematic, vibrant, no text`;
+        // 2a. Generate image for this scene — lock the animal/subject
+        const reelAnimalMatch = (input.subject || input.topic).toLowerCase();
+        const reelAnimals = ['dog', 'cat', 'puppy', 'kitten', 'bird', 'hamster', 'rabbit', 'fish', 'turtle', 'parrot', 'horse', 'cow', 'pig', 'duck', 'chicken', 'monkey', 'bear', 'deer', 'fox', 'owl', 'penguin', 'elephant', 'lion', 'tiger', 'giraffe', 'golden retriever', 'labrador', 'poodle', 'bulldog', 'corgi', 'husky', 'chihuahua', 'beagle'];
+        const reelFoundAnimal = reelAnimals.find(a => reelAnimalMatch.includes(a));
+        let scenePrompt = `${scene.visualDescription} funny animals, cinematic, vibrant, no text`;
+        if (reelFoundAnimal && !scenePrompt.toLowerCase().includes(reelFoundAnimal)) {
+          scenePrompt = `A ${reelFoundAnimal}, ${scenePrompt}`;
+        }
         const { imageUrl } = await generateImage(
           scenePrompt,
           "1024x1792",

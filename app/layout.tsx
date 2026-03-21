@@ -22,7 +22,7 @@ export default function RootLayout({
     <html lang="en" className={`dark ${sora.variable} ${sora.className}`}>
       <body className="min-h-screen bg-[#0a0a0a] text-white antialiased">
         <Sidebar />
-        <main className="ml-60 min-h-screen">{children}</main>
+        <main className="ml-0 lg:ml-60 min-h-screen pt-14 lg:pt-0">{children}</main>
       </body>
     </html>
   );

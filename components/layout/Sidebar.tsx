@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -17,6 +18,8 @@ import {
   Handshake,
   Settings,
   ImageIcon,
+  Menu,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -39,51 +42,78 @@ const navItems = [
 
 function Sidebar() {
   const pathname = usePathname();
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <aside className="fixed left-0 top-0 z-40 flex h-screen w-60 flex-col border-r border-[#1f1f1f] bg-[#0f0f0f]">
-      {/* Logo */}
-      <div className="flex flex-col px-6 py-6">
-        <span className="text-xl font-bold text-[#f0b429]">GramGenius</span>
-        <span className="text-sm text-[#888888]">AI Growth Engine</span>
-      </div>
+    <>
+      {/* Mobile hamburger button - fixed top left */}
+      <button
+        onClick={() => setMobileOpen(true)}
+        className="fixed left-4 top-4 z-50 lg:hidden rounded-lg bg-[#111] border border-[#1f1f1f] p-2"
+      >
+        <Menu className="h-5 w-5 text-[#f0b429]" />
+      </button>
 
-      {/* Navigation */}
-      <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-2">
-        {navItems.map((item) => {
-          const isActive =
-            item.href === "/"
-              ? pathname === "/"
-              : pathname.startsWith(item.href);
-          const Icon = item.icon;
+      {/* Mobile overlay */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-40 bg-black/60 lg:hidden" onClick={() => setMobileOpen(false)} />
+      )}
 
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors",
-                isActive
-                  ? "text-[#f0b429]"
-                  : "text-[#888888] hover:text-white"
-              )}
-            >
-              {/* Active indicator */}
-              {isActive && (
-                <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-[#f0b429]" />
-              )}
-              <Icon className="h-5 w-5 shrink-0" />
-              <span>{item.label}</span>
-              {"badge" in item && item.badge && (
-                <span className="ml-auto rounded-full bg-[#f0b429] px-1.5 py-0.5 text-[10px] font-bold leading-none text-black">
-                  {item.badge}
-                </span>
-              )}
-            </Link>
-          );
-        })}
-      </nav>
-    </aside>
+      {/* Sidebar */}
+      <aside className={cn(
+        "fixed left-0 top-0 z-50 flex h-screen w-60 flex-col border-r border-[#1f1f1f] bg-[#0f0f0f] transition-transform duration-200",
+        "lg:translate-x-0",
+        mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+      )}>
+        {/* Mobile close button */}
+        <button onClick={() => setMobileOpen(false)} className="absolute right-3 top-3 lg:hidden text-[#888] hover:text-white">
+          <X className="h-5 w-5" />
+        </button>
+
+        {/* Logo */}
+        <div className="flex flex-col px-6 py-6">
+          <span className="text-xl font-bold text-[#f0b429]">GramGenius</span>
+          <span className="text-sm text-[#888888]">AI Growth Engine</span>
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-2">
+          {navItems.map((item) => {
+            const isActive =
+              item.href === "/"
+                ? pathname === "/"
+                : pathname.startsWith(item.href);
+            const Icon = item.icon;
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setMobileOpen(false)}
+                className={cn(
+                  "relative flex items-center gap-3 rounded-lg px-3 py-3 lg:py-2.5 text-sm transition-colors",
+                  isActive
+                    ? "text-[#f0b429]"
+                    : "text-[#888888] hover:text-white"
+                )}
+              >
+                {/* Active indicator */}
+                {isActive && (
+                  <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-[#f0b429]" />
+                )}
+                <Icon className="h-5 w-5 shrink-0" />
+                <span>{item.label}</span>
+                {"badge" in item && item.badge && (
+                  <span className="ml-auto rounded-full bg-[#f0b429] px-1.5 py-0.5 text-[10px] font-bold leading-none text-black">
+                    {item.badge}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
+        </nav>
+      </aside>
+    </>
   );
 }
 

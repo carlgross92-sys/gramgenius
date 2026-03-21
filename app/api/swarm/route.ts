@@ -10,6 +10,8 @@ export async function POST(request: NextRequest) {
     let { topic, brandProfileId, postType, recentHashtagsUsed, postGoal } =
       body as SwarmInput & { autoPost?: boolean };
     const autoPost = body.autoPost === true;
+    const subject: string = body.subject || "";
+    const mediaType: "image" | "video" | "both" = body.mediaType || "both";
 
     if (!topic) {
       return Response.json(
@@ -71,11 +73,20 @@ export async function POST(request: NextRequest) {
     } = {};
 
     try {
+      // Determine effective post type for media based on mediaType override
+      let mediaPostType = effectivePostType as "FEED" | "CAROUSEL" | "REEL" | "STORY";
+      if (mediaType === "image" && mediaPostType === "REEL") {
+        mediaPostType = "FEED"; // Force image-only generation
+      } else if (mediaType === "video" && mediaPostType !== "REEL") {
+        mediaPostType = "REEL"; // Force video generation
+      }
+
       mediaResult = await runMediaAgent({
-        postType: effectivePostType as "FEED" | "CAROUSEL" | "REEL" | "STORY",
+        postType: mediaPostType,
         topic,
         caption: firstCaption,
         hashtags: swarmOutput.hashtags?.fullSet || [],
+        subject: subject || "",
         visualConcept: swarmOutput.visualConcept || { dallePrompt: topic },
         strategy: swarmOutput.strategy || {},
         autoPost,

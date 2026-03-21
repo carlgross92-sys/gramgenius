@@ -49,6 +49,8 @@ export default function SwarmStudioPage() {
   const [topic, setTopic] = useState("");
   const [postType, setPostType] = useState("FEED");
   const [postGoal, setPostGoal] = useState("engagement");
+  const [mediaType, setMediaType] = useState<"image" | "video" | "both">("image");
+  const [subject, setSubject] = useState("");
   const [autoPost, setAutoPost] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -84,7 +86,7 @@ export default function SwarmStudioPage() {
       const res = await fetch("/api/swarm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic, postType, postGoal, autoPost }),
+        body: JSON.stringify({ topic, postType, postGoal, autoPost, mediaType, subject }),
       });
 
       const data = await res.json();
@@ -192,6 +194,24 @@ export default function SwarmStudioPage() {
                     <SelectItem value="growth">Growth</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm text-[#888]">Media Type</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(["image", "video", "both"] as const).map((t) => (
+                    <button key={t} onClick={() => setMediaType(t)}
+                      className={`rounded-lg border px-3 py-2 text-sm capitalize transition ${
+                        mediaType === t ? "border-[#f0b429] bg-[#f0b429]/10 text-[#f0b429]" : "border-[#1f1f1f] bg-[#0a0a0a] text-[#888] hover:text-white"
+                      }`}>{t === "image" ? "\uD83D\uDDBC\uFE0F Image" : t === "video" ? "\uD83C\uDFAC Video" : "\uD83D\uDCF8 Both"}</button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm text-[#888]">Subject (optional)</label>
+                <input value={subject} onChange={(e) => setSubject(e.target.value)}
+                  placeholder='e.g. "golden retriever puppy"'
+                  className="w-full rounded-lg border border-[#1f1f1f] bg-[#0a0a0a] px-3 py-2 text-sm text-white placeholder:text-[#555]" />
+                <p className="mt-1 text-xs text-[#555]">Locks this animal/subject into all images</p>
               </div>
               <div className="flex items-center justify-between rounded-lg bg-[#0a0a0a] border border-[#1f1f1f] p-3">
                 <div>
@@ -504,11 +524,15 @@ export default function SwarmStudioPage() {
                       ) : null}
                     </div>
                   ) : null}
-                  <div className="flex gap-3 mt-3">
-                    <a href="/media" className="text-[#f0b429] text-xs hover:underline">View in Media Library</a>
-                    <button onClick={() => { setResult(null); setTopic(""); setAgents(INITIAL_AGENTS); }} className="text-[#888] text-xs hover:text-white">
-                      Generate Another
-                    </button>
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    <GoldButton onClick={() => { setResult(null); setAgents(INITIAL_AGENTS); launchSwarm(); }} className="text-sm">
+                      {"\uD83D\uDD04"} Make Another
+                    </GoldButton>
+                    <GoldButton variant="secondary" onClick={() => { setResult(null); setAgents(INITIAL_AGENTS); setMediaType("image"); launchSwarm(); }} className="text-sm">
+                      {"\uD83C\uDFA8"} New Image
+                    </GoldButton>
+                    <a href="/media"><GoldButton variant="secondary" className="text-sm">{"\uD83D\uDCBE"} Media Library</GoldButton></a>
+                    <a href="/calendar"><GoldButton variant="secondary" className="text-sm">{"\uD83D\uDCC5"} Schedule</GoldButton></a>
                   </div>
                 </DarkCard>
               ) : null}
