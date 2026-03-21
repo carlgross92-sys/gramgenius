@@ -265,7 +265,7 @@ Return ONLY valid JSON, no markdown, no code blocks.`,
             imageUrl,
             scene.visualDescription,
             5,
-            "1080:1920"
+            "720:1280"
           );
 
           const taskResult = await pollTask(taskId);

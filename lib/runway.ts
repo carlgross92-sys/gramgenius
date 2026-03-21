@@ -16,7 +16,7 @@ export async function imageToVideo(
   imageUrl: string,
   promptText: string,
   duration: 5 | 10 = 10,
-  ratio: string = "1080:1920"
+  ratio: string = "720:1280"
 ): Promise<string> {
   const response = await fetch(`${RUNWAY_BASE}/image_to_video`, {
     method: "POST",
@@ -42,7 +42,7 @@ export async function imageToVideo(
 export async function textToVideo(
   promptText: string,
   duration: number = 10,
-  ratio: string = "1080:1920"
+  ratio: string = "720:1280"
 ): Promise<string> {
   const response = await fetch(`${RUNWAY_BASE}/text_to_video`, {
     method: "POST",

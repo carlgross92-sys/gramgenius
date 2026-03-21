@@ -263,7 +263,7 @@ export async function generateAndScheduleReel(
           imageResult.imageUrl,
           scene.voiceoverLine || topic.topic,
           5,
-          "1080:1920"
+          "720:1280"
         );
 
         // Poll until video is ready
