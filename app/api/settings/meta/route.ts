@@ -6,14 +6,55 @@ const META_BASE = "https://graph.facebook.com/v19.0";
 export async function GET() {
   try {
     const settings = await prisma.appSettings.findFirst();
+
+    if (!settings?.metaAccessToken) {
+      return Response.json({ connected: false, hasToken: false });
+    }
+
+    // Verify token is still valid
+    let valid = false;
+    let name = "";
+    let igUsername = "";
+    let igFollowers = 0;
+    try {
+      const meRes = await fetch(
+        `${META_BASE}/me?fields=id,name&access_token=${settings.metaAccessToken}`
+      );
+      const meData = await meRes.json();
+      valid = !meData.error;
+      name = meData.name || "";
+    } catch {
+      valid = false;
+    }
+
+    // Check IG account info if we have the ID
+    if (valid && settings.instagramBusinessId) {
+      try {
+        const igRes = await fetch(
+          `${META_BASE}/${settings.instagramBusinessId}?fields=username,followers_count&access_token=${settings.metaAccessToken}`
+        );
+        const igData = await igRes.json();
+        if (!igData.error) {
+          igUsername = igData.username || "";
+          igFollowers = igData.followers_count || 0;
+        }
+      } catch { /* skip */ }
+    }
+
     return Response.json({
-      hasToken: !!settings?.metaAccessToken,
-      hasIgId: !!settings?.instagramBusinessId,
-      hasFbPageId: !!settings?.facebookPageId,
-      tokenExpiresAt: settings?.metaTokenExpiresAt || null,
+      connected: valid,
+      hasToken: true,
+      tokenValid: valid,
+      hasIgId: !!settings.instagramBusinessId,
+      instagramBusinessId: settings.instagramBusinessId || null,
+      instagramUsername: igUsername || null,
+      instagramFollowers: igFollowers,
+      facebookPageId: settings.facebookPageId || null,
+      userName: name,
+      tokenExpiresAt: settings.metaTokenExpiresAt || null,
     });
   } catch (error) {
-    return Response.json({ error: "Failed to load settings" }, { status: 500 });
+    return Response.json({ connected: false, error: "Failed to check" }, { status: 500 });
   }
 }
 

@@ -36,6 +36,8 @@ let _tokenFromDb: string | null = null;
 let _igIdFromDb: string | null = null;
 
 export async function initMetaFromDb() {
+  // Force fresh read from DB (clear cache)
+  _cachedSettings = null;
   const settings = await loadDbSettings();
   _tokenFromDb = settings.metaAccessToken || null;
   _igIdFromDb = settings.instagramBusinessId || null;

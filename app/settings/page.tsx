@@ -119,7 +119,7 @@ export default function SettingsPage() {
   const [recoveryMode, setRecoveryMode] = useState(false);
 
   useEffect(() => {
-    // Load settings on mount
+    // Load brand settings on mount
     async function loadSettings() {
       try {
         const res = await fetch("/api/brand");
@@ -133,7 +133,34 @@ export default function SettingsPage() {
         // Silent fail
       }
     }
+    // Load Meta connection status from DB
+    async function loadMetaStatus() {
+      try {
+        const res = await fetch("/api/settings/meta");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.connected) {
+            setMetaConnection({
+              connected: true,
+              userName: data.userName || "",
+              pages: [],
+              autoDiscovered: data.instagramBusinessId ? {
+                igAccountId: data.instagramBusinessId,
+                igUsername: data.instagramUsername || "",
+                igProfilePic: null,
+                igFollowers: data.instagramFollowers || 0,
+                pageId: data.facebookPageId || "",
+                pageName: "",
+              } : null,
+            });
+          }
+        }
+      } catch {
+        // Silent fail
+      }
+    }
     loadSettings();
+    loadMetaStatus();
   }, []);
 
   async function testConnection() {
@@ -142,7 +169,8 @@ export default function SettingsPage() {
       setConnectionError(null);
       setMetaConnection(null);
 
-      const res = await fetch("/api/meta/connect", {
+      // Save to DB via /api/settings/meta (persists permanently)
+      const res = await fetch("/api/settings/meta", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ accessToken: metaToken }),
@@ -150,17 +178,20 @@ export default function SettingsPage() {
 
       const data = await res.json();
 
-      if (data.valid) {
+      if (data.valid && data.saved) {
         setMetaConnection({
           connected: true,
           userName: data.userName || "Unknown",
-          pages: data.pages || [],
-          autoDiscovered: data.autoDiscovered || null,
+          pages: [],
+          autoDiscovered: data.instagramBusinessId ? {
+            igAccountId: data.instagramBusinessId,
+            igUsername: data.instagramUsername || "",
+            igProfilePic: null,
+            igFollowers: data.instagramFollowers || 0,
+            pageId: data.facebookPageId || "",
+            pageName: "",
+          } : null,
         });
-        if (data.error) {
-          // Partial success (token valid but pages had issues)
-          setConnectionError(data.error);
-        }
       } else {
         setConnectionError(
           data.error || "Connection failed. Check your access token."
