@@ -7,6 +7,7 @@ import {
   createReelContainer,
   pollContainerStatus,
   publishContainer,
+  initMetaFromDb,
 } from "@/lib/meta";
 import {
   searchAnimalVideo,
@@ -337,6 +338,8 @@ export async function runMediaAgent(
   // -----------------------------------------------------------------------
 
   if (input.autoPost) {
+    // Load Meta tokens from DB if not in env
+    await initMetaFromDb();
     try {
       const formattedCaption = (
         input.caption +

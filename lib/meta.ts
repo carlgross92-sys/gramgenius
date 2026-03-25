@@ -1,14 +1,55 @@
+import prisma from "@/lib/prisma";
+
 const META_BASE = "https://graph.facebook.com/v19.0";
 
+// Cache DB settings for the duration of a request
+let _cachedSettings: { metaAccessToken?: string | null; instagramBusinessId?: string | null; facebookPageId?: string | null } | null = null;
+
+async function loadDbSettings() {
+  if (!_cachedSettings) {
+    try {
+      const settings = await prisma.appSettings.findFirst();
+      _cachedSettings = settings || {};
+    } catch {
+      _cachedSettings = {};
+    }
+  }
+  return _cachedSettings;
+}
+
+async function getAccessTokenAsync(): Promise<string> {
+  if (process.env.META_ACCESS_TOKEN) return process.env.META_ACCESS_TOKEN;
+  const settings = await loadDbSettings();
+  if (settings.metaAccessToken) return settings.metaAccessToken;
+  throw new Error("META_ACCESS_TOKEN not configured. Add in Settings page.");
+}
+
+async function getIGUserIdAsync(): Promise<string> {
+  if (process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID) return process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID;
+  const settings = await loadDbSettings();
+  if (settings.instagramBusinessId) return settings.instagramBusinessId;
+  throw new Error("INSTAGRAM_BUSINESS_ACCOUNT_ID not configured. Add in Settings page.");
+}
+
+// Module-level cache set by initMetaFromDb()
+let _tokenFromDb: string | null = null;
+let _igIdFromDb: string | null = null;
+
+export async function initMetaFromDb() {
+  const settings = await loadDbSettings();
+  _tokenFromDb = settings.metaAccessToken || null;
+  _igIdFromDb = settings.instagramBusinessId || null;
+}
+
 function getAccessToken(): string {
-  const token = process.env.META_ACCESS_TOKEN;
-  if (!token) throw new Error("META_ACCESS_TOKEN not configured");
+  const token = process.env.META_ACCESS_TOKEN || _tokenFromDb;
+  if (!token) throw new Error("META_ACCESS_TOKEN not configured. Add in Settings page.");
   return token;
 }
 
 function getIGUserId(): string {
-  const id = process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID;
-  if (!id) throw new Error("INSTAGRAM_BUSINESS_ACCOUNT_ID not configured");
+  const id = process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID || _igIdFromDb;
+  if (!id) throw new Error("INSTAGRAM_BUSINESS_ACCOUNT_ID not configured. Add in Settings page.");
   return id;
 }
 

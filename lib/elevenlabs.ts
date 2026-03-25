@@ -23,8 +23,8 @@ export async function textToSpeech(
   const vid = voiceId || process.env.ELEVENLABS_VOICE_ID;
   if (!vid) throw new Error("No ElevenLabs voice ID configured");
 
-  // Truncate to 350 chars to conserve credits
-  const truncated = text.length > 350 ? text.substring(0, 347) + "..." : text;
+  // Truncate to 150 chars to conserve credits
+  const truncated = text.length > 150 ? text.substring(0, 147) + "..." : text;
 
   const response = await fetch(`${ELEVENLABS_BASE}/text-to-speech/${vid}`, {
     method: "POST",
@@ -101,17 +101,18 @@ export function generateVoiceoverScript(
   caption: string,
   animal: string
 ): string {
+  // Keep scripts SHORT — max 150 chars to conserve credits
   const templates = [
-    `Wait... is that ${animal} really doing that right now? I cannot believe what I'm seeing! Tag someone who acts just like this!`,
-    `POV: Your ${animal} has absolutely zero shame and we love them for it! Drop a comment if your pet does this too!`,
-    `Nobody asked but your ${animal} is out here living their best life and honestly? Goals. Double tap if you relate!`,
-    `This ${animal} said: I do what I want, when I want. And honestly? We respect it. Follow for more chaos!`,
-    `Breaking news: Local ${animal} caught in the act again. Witnesses say it was hilarious. More at eleven.`,
+    `This ${animal} has ZERO regrets and honestly? We love it.`,
+    `Wait is that ${animal} really doing that right now? I can't.`,
+    `POV your ${animal} has absolutely no shame. Tag someone like this.`,
+    `This ${animal} said I do what I want. And we respect it.`,
+    `Local ${animal} caught in the act again. Witnesses say hilarious.`,
+    `Nobody asked but this ${animal} is living their best life.`,
+    `When your ${animal} discovers something new. Pure chaos.`,
+    `This ${animal} really said nope not today. Mood honestly.`,
   ];
-  return templates[Math.floor(Math.random() * templates.length)].substring(
-    0,
-    340
-  );
+  return templates[Math.floor(Math.random() * templates.length)].substring(0, 150);
 }
 
 export async function listVoices(): Promise<

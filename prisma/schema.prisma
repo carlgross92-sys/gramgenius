@@ -186,6 +186,16 @@ model MediaLibrary {
   createdAt       DateTime @default(now())
 }
 
+model AppSettings {
+  id                  String    @id @default(cuid())
+  metaAccessToken     String?
+  instagramBusinessId String?
+  facebookPageId      String?
+  metaTokenExpiresAt  DateTime?
+  pexelsApiKey        String?
+  updatedAt           DateTime  @updatedAt
+}
+
 model EngineConfig {
   id              String    @id @default(cuid())
   enabled         Boolean   @default(true)

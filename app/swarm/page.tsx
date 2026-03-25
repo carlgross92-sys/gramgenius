@@ -387,6 +387,40 @@ export default function SwarmStudioPage() {
                         {ms.voiceoverScript ? <p className="text-xs text-[#888] mt-1 italic">&quot;{String(ms.voiceoverScript)}&quot;</p> : null}
                       </div>
                     ) : null}
+
+                    {/* Download buttons */}
+                    {(ms.videoUrl || ms.imageUrl || r.generatedImageUrl || ms.voiceoverUrl) ? (
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {ms.videoUrl ? (
+                          <a href={String(ms.videoUrl)} download target="_blank" rel="noopener noreferrer"
+                            className="rounded-lg border border-[#1f1f1f] bg-[#0a0a0a] px-3 py-2 text-xs text-white hover:bg-[#1a1a1a]">
+                            📹 Download Video
+                          </a>
+                        ) : null}
+                        {(ms.imageUrl || r.generatedImageUrl) ? (
+                          <a href={String(ms.imageUrl || r.generatedImageUrl)} download target="_blank" rel="noopener noreferrer"
+                            className="rounded-lg border border-[#1f1f1f] bg-[#0a0a0a] px-3 py-2 text-xs text-white hover:bg-[#1a1a1a]">
+                            🖼️ Download Image
+                          </a>
+                        ) : null}
+                        {ms.voiceoverUrl ? (
+                          <a href={String(ms.voiceoverUrl)} download target="_blank" rel="noopener noreferrer"
+                            className="rounded-lg border border-[#1f1f1f] bg-[#0a0a0a] px-3 py-2 text-xs text-white hover:bg-[#1a1a1a]">
+                            🎙️ Download Audio
+                          </a>
+                        ) : null}
+                      </div>
+                    ) : null}
+
+                    {/* CapCut instructions for combining */}
+                    {ms.videoUrl && ms.voiceoverUrl ? (
+                      <div className="mt-3 rounded-lg bg-[#0a0a0a] border border-[#1f1f1f] p-3">
+                        <p className="text-xs text-[#f0b429] font-medium mb-1">Add sound to your Reel:</p>
+                        <p className="text-xs text-[#888]">
+                          Open CapCut → Import video → Add voiceover as audio track → Export → Post to Instagram
+                        </p>
+                      </div>
+                    ) : null}
                   </DarkCard>
                 );
               })()}
