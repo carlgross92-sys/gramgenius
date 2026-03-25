@@ -338,6 +338,15 @@ export async function runMediaAgent(
   // -----------------------------------------------------------------------
 
   if (input.autoPost) {
+    // RULE: Never post a video without voiceover
+    if (input.postType === "REEL" && output.videoUrl && !output.voiceoverUrl) {
+      output.warnings.push(
+        "Video saved as DRAFT — voiceover generation failed. Fix ElevenLabs credits then retry. Silent videos are not posted."
+      );
+      console.log("[Media Agent] Skipping Instagram post — no voiceover for REEL");
+      return output;
+    }
+
     // Load Meta tokens from DB if not in env
     await initMetaFromDb();
     try {
@@ -350,22 +359,22 @@ export async function runMediaAgent(
       let igPostId: string | undefined;
 
       if (input.postType === "REEL" && output.videoUrl) {
-        // Reel: create container -> poll -> publish
-        console.log("[Media Agent] Posting Reel to Instagram...");
-        const containerId = await createReelContainer(
-          output.videoUrl,
-          formattedCaption
-        );
+        console.log("[Instagram] Starting Reel post...");
+        console.log("[Instagram] Video URL:", output.videoUrl?.substring(0, 80));
+        console.log("[Instagram] Caption length:", formattedCaption.length);
+        const containerId = await createReelContainer(output.videoUrl, formattedCaption);
+        console.log("[Instagram] Container ID:", containerId);
         await pollContainerStatus(containerId);
+        console.log("[Instagram] Container FINISHED, publishing...");
         igPostId = await publishContainer(containerId);
+        console.log("[Instagram] Published! Post ID:", igPostId);
       } else if (output.imageUrl) {
-        // Feed image: create container -> publish
-        console.log("[Media Agent] Posting Feed image to Instagram...");
-        const containerId = await createImageContainer(
-          output.imageUrl,
-          formattedCaption
-        );
+        console.log("[Instagram] Starting Feed image post...");
+        console.log("[Instagram] Image URL:", output.imageUrl?.substring(0, 80));
+        const containerId = await createImageContainer(output.imageUrl, formattedCaption);
+        console.log("[Instagram] Container ID:", containerId);
         igPostId = await publishContainer(containerId);
+        console.log("[Instagram] Published! Post ID:", igPostId);
       } else {
         output.warnings.push(
           "Auto-post skipped: no image or video URL available"

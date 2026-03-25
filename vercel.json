@@ -1,4 +1,15 @@
 {
+  "functions": {
+    "app/api/swarm/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/auto/daily-engine/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/auto/continuous/route.ts": {
+      "maxDuration": 300
+    }
+  },
   "crons": [
     {
       "path": "/api/auto/daily-engine",

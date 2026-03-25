@@ -35,7 +35,7 @@ export async function textToSpeech(
     },
     body: JSON.stringify({
       text: truncated,
-      model_id: "eleven_multilingual_v2",
+      model_id: "eleven_turbo_v2",
       voice_settings: {
         stability: 0.5,
         similarity_boost: 0.75,
@@ -101,18 +101,18 @@ export function generateVoiceoverScript(
   caption: string,
   animal: string
 ): string {
-  // Keep scripts SHORT — max 150 chars to conserve credits
+  // Ultra short — max 80 chars to minimize credit usage
   const templates = [
-    `This ${animal} has ZERO regrets and honestly? We love it.`,
-    `Wait is that ${animal} really doing that right now? I can't.`,
-    `POV your ${animal} has absolutely no shame. Tag someone like this.`,
-    `This ${animal} said I do what I want. And we respect it.`,
-    `Local ${animal} caught in the act again. Witnesses say hilarious.`,
-    `Nobody asked but this ${animal} is living their best life.`,
-    `When your ${animal} discovers something new. Pure chaos.`,
-    `This ${animal} really said nope not today. Mood honestly.`,
+    `This ${animal} said I QUIT and honestly same`,
+    `Your ${animal} owns the house you just pay rent`,
+    `Nobody told this ${animal} the rules respect`,
+    `This ${animal} has zero regrets and we love it`,
+    `POV your ${animal} has absolutely no shame`,
+    `This ${animal} really said nope not today mood`,
+    `When your ${animal} is more confident than you`,
+    `Living rent free and thriving goals honestly`,
   ];
-  return templates[Math.floor(Math.random() * templates.length)].substring(0, 150);
+  return templates[Math.floor(Math.random() * templates.length)].substring(0, 80);
 }
 
 export async function listVoices(): Promise<
