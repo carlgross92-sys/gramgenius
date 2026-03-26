@@ -4,9 +4,9 @@ import { writeFileSync, readFileSync, unlinkSync, existsSync, mkdirSync, chmodSy
 import { join } from "path";
 import { tmpdir } from "os";
 
-// URL to a static ffmpeg build for Linux x86_64 (Vercel runs Amazon Linux)
-const FFMPEG_URL = "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz";
-const FFMPEG_BIN_PATH = join(tmpdir(), "ffmpeg-bin", "ffmpeg");
+// Small static ffmpeg build (~30MB) for Linux x86_64
+const FFMPEG_URL = "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.0/ffmpeg-linux-x64";
+const FFMPEG_BIN_PATH = join(tmpdir(), "ffmpeg");
 
 /**
  * Download and cache a static ffmpeg binary to /tmp.
@@ -14,51 +14,33 @@ const FFMPEG_BIN_PATH = join(tmpdir(), "ffmpeg-bin", "ffmpeg");
  */
 async function ensureFfmpeg(): Promise<string> {
   if (existsSync(FFMPEG_BIN_PATH)) {
-    console.log("[AudioMerge] ffmpeg already cached in /tmp");
+    console.log("[AudioMerge] ffmpeg cached in /tmp");
     return FFMPEG_BIN_PATH;
   }
 
-  console.log("[AudioMerge] Downloading static ffmpeg binary...");
-  const binDir = join(tmpdir(), "ffmpeg-bin");
-  if (!existsSync(binDir)) mkdirSync(binDir, { recursive: true });
-
+  // Try system ffmpeg first (some environments have it)
   try {
-    // Download the tar.xz archive
-    const archivePath = join(binDir, "ffmpeg.tar.xz");
-    const res = await fetch(FFMPEG_URL);
+    execSync("ffmpeg -version", { timeout: 5000, stdio: "pipe" });
+    console.log("[AudioMerge] System ffmpeg available");
+    return "ffmpeg";
+  } catch {}
+
+  console.log("[AudioMerge] Downloading static ffmpeg binary...");
+  try {
+    const res = await fetch(FFMPEG_URL, { redirect: "follow" });
     if (!res.ok) throw new Error(`Download failed: ${res.status}`);
     const buffer = Buffer.from(await res.arrayBuffer());
-    writeFileSync(archivePath, buffer);
-    console.log(`[AudioMerge] Downloaded: ${buffer.length} bytes`);
+    writeFileSync(FFMPEG_BIN_PATH, buffer);
+    chmodSync(FFMPEG_BIN_PATH, 0o755);
+    console.log(`[AudioMerge] ffmpeg downloaded: ${(buffer.length / 1024 / 1024).toFixed(1)}MB`);
 
-    // Extract just the ffmpeg binary
-    execSync(
-      `cd "${binDir}" && tar -xf ffmpeg.tar.xz --wildcards '*/ffmpeg' --strip-components=1`,
-      { timeout: 30000, stdio: "pipe" }
-    );
-
-    if (existsSync(FFMPEG_BIN_PATH)) {
-      chmodSync(FFMPEG_BIN_PATH, 0o755);
-      console.log("[AudioMerge] ffmpeg extracted and ready");
-
-      // Clean up archive
-      try { unlinkSync(archivePath); } catch {}
-
-      return FFMPEG_BIN_PATH;
-    }
-
-    throw new Error("ffmpeg binary not found after extraction");
-  } catch (downloadErr) {
-    console.error("[AudioMerge] Static ffmpeg download failed:", downloadErr);
-
-    // Fallback: try system ffmpeg (works on some platforms)
-    try {
-      execSync("ffmpeg -version", { timeout: 5000, stdio: "pipe" });
-      console.log("[AudioMerge] Using system ffmpeg");
-      return "ffmpeg";
-    } catch {
-      throw new Error("No ffmpeg available — cannot merge audio");
-    }
+    // Verify it runs
+    execSync(`"${FFMPEG_BIN_PATH}" -version`, { timeout: 5000, stdio: "pipe" });
+    console.log("[AudioMerge] ffmpeg verified working");
+    return FFMPEG_BIN_PATH;
+  } catch (err) {
+    console.error("[AudioMerge] ffmpeg download/verify failed:", err);
+    throw new Error("No ffmpeg available");
   }
 }
 
