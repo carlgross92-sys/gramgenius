@@ -160,25 +160,12 @@ export async function GET(request: Request) {
       }
     }
 
-    // ── Step 5B: Merge audio into video ─────────────────────────────────
+    // ── Step 5B: Note about audio ──────────────────────────────────────
+    // Vercel serverless can't run ffmpeg. The Pexels video has ambient
+    // animal sounds. ElevenLabs voiceover is a separate MP3.
+    // Both are saved to the job for download/manual combining.
     if (videoUrl && voiceoverUrl) {
-      try {
-        console.log(`[Process Queue] Merging voiceover into video for job ${job.id}...`);
-        const { mergeAudioWithVideo } = await import("@/lib/audio-merge");
-        const { mergedUrl } = await mergeAudioWithVideo(
-          videoUrl,
-          voiceoverUrl,
-          `job-merged-${job.id}`
-        );
-        videoUrl = mergedUrl;
-        qualityNotes.push("audio merge: ok");
-        console.log(`[Process Queue] Audio merge SUCCESS`);
-      } catch (mergeErr) {
-        const msg = mergeErr instanceof Error ? mergeErr.message : "merge failed";
-        qualityNotes.push(`audio merge: FAILED - ${msg}`);
-        console.error(`[Process Queue] Audio merge FAILED: ${msg}`);
-        // Video exists but has no voiceover baked in
-      }
+      qualityNotes.push("audio: video has ambient sound + separate voiceover MP3");
     }
 
     // ── Step 6: Calculate quality score ─────────────────────────────────

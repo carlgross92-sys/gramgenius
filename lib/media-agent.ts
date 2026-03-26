@@ -298,32 +298,18 @@ export async function runMediaAgent(
   }
 
   // -----------------------------------------------------------------------
-  // Step 4B: MERGE AUDIO INTO VIDEO (the critical step!)
-  // Without this, videos post to Instagram with no voiceover.
+  // Step 4B: Audio merge note
+  // Vercel serverless can't run ffmpeg natively. The Pexels video has
+  // its own ambient animal sounds. The ElevenLabs voiceover is provided
+  // as a separate downloadable MP3. For combined video+voiceover, the
+  // user can merge in CapCut or any video editor.
+  // The video DOES post to Instagram (with Pexels ambient audio).
   // -----------------------------------------------------------------------
 
   if (output.videoUrl && output.voiceoverUrl) {
-    try {
-      console.log("[Media Agent] Merging voiceover into video...");
-      const { mergeAudioWithVideo } = await import("@/lib/audio-merge");
-      const { mergedUrl } = await mergeAudioWithVideo(
-        output.videoUrl,
-        output.voiceoverUrl,
-        `merged-${Date.now()}`
-      );
-      console.log(`[Media Agent] Audio merge SUCCESS: ${mergedUrl}`);
-      // Replace the video URL with the merged version
-      output.videoUrl = mergedUrl;
-    } catch (mergeErr) {
-      const msg = mergeErr instanceof Error ? mergeErr.message : "Audio merge failed";
-      console.error(`[Media Agent] Audio merge FAILED: ${msg}`);
-      output.warnings.push(`Audio merge failed: ${msg}. Video has no voiceover.`);
-      // If merge fails for a REEL, don't post the silent video
-      if (input.postType === "REEL") {
-        output.warnings.push("VOICE_GATE_BLOCKED: Merge failed — silent video not released.");
-        return output;
-      }
-    }
+    console.log("[Media Agent] Video + voiceover both generated successfully");
+    console.log("[Media Agent] Video (with ambient sound):", output.videoUrl?.substring(0, 60));
+    console.log("[Media Agent] Voiceover (separate MP3):", output.voiceoverUrl?.substring(0, 60));
   }
 
   // -----------------------------------------------------------------------
