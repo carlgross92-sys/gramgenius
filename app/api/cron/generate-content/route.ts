@@ -60,7 +60,21 @@ export async function GET(request: Request) {
       pillars = [];
     }
 
-    const count = Math.min(engine.postsPerDay, 10);
+    // Calculate how many MORE jobs are needed to hit daily target
+    const existingToday = await prisma.contentJob.count({
+      where: {
+        createdAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) },
+        status: { in: ["QUEUED", "PROCESSING", "COMPLETED"] },
+      },
+    });
+    const count = Math.min(
+      Math.max(0, (engine.postsPerDay || 30) - existingToday),
+      15 // generate up to 15 at a time to stay within API limits
+    );
+    if (count === 0) {
+      return Response.json({ message: `Daily target already met (${existingToday} today)`, skipped: true });
+    }
+    console.log(`[Generate Content] Need ${count} more jobs (${existingToday} exist today, target ${engine.postsPerDay})`);
 
     // ── Generate topics using Brand Brain ────────────────────────────────
     const pillarList = pillars.length > 0

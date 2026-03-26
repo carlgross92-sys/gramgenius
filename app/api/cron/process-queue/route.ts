@@ -7,7 +7,7 @@ import { buildCaptionPrompt, buildVoiceoverPrompt, type ReelStyle } from "@/lib/
 
 export const maxDuration = 300;
 
-const MAX_CHAINS = 3;
+const MAX_CHAINS = 10; // Process up to 10 jobs per invocation
 
 export async function GET(request: Request) {
   try {
@@ -233,37 +233,41 @@ export async function GET(request: Request) {
       },
     });
 
-    // ── Chain to process next job if COMPLETED ──────────────────────────
-    if (finalStatus === "COMPLETED") {
-      const url = new URL(request.url);
-      const currentChain = parseInt(url.searchParams.get("chain") || "0", 10);
+    // ── Chain to process next job (regardless of this job's result) ─────
+    const url = new URL(request.url);
+    const currentChain = parseInt(url.searchParams.get("chain") || "0", 10);
 
-      if (currentChain < MAX_CHAINS) {
-        // Check if more queued jobs exist
-        const moreJobs = await prisma.contentJob.count({
-          where: {
-            status: "QUEUED",
-            retryCount: { lt: 3 },
-            OR: [
-              { scheduledFor: { lte: new Date() } },
-              { scheduledFor: null },
-            ],
-          },
+    if (currentChain < MAX_CHAINS) {
+      const moreQueued = await prisma.contentJob.count({
+        where: { status: "QUEUED", retryCount: { lt: 3 } },
+      });
+
+      if (moreQueued > 0) {
+        await new Promise((r) => setTimeout(r, 3000));
+        try {
+          const nextUrl = new URL("/api/cron/process-queue", request.url);
+          nextUrl.searchParams.set("chain", String(currentChain + 1));
+          fetch(nextUrl.toString(), {
+            headers: { authorization: request.headers.get("authorization") || "" },
+          }).catch(() => {});
+        } catch {}
+      } else {
+        // No queued jobs — check if we need to backfill to reach daily target
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const postedToday = await prisma.contentJob.count({
+          where: { status: "COMPLETED", completedAt: { gte: today } },
         });
+        const dailyTarget = engine.postsPerDay || 30;
 
-        if (moreJobs > 0) {
-          // 5-second stagger delay to avoid rate limits with 30 jobs/day
-          await new Promise((resolve) => setTimeout(resolve, 5000));
-
+        if (postedToday < dailyTarget) {
+          console.log(`[Process Queue] Backfill needed: ${postedToday}/${dailyTarget} — triggering content generation`);
           try {
-            const nextUrl = new URL("/api/cron/process-queue", request.url);
-            nextUrl.searchParams.set("chain", String(currentChain + 1));
-            fetch(nextUrl.toString(), {
+            const genUrl = new URL("/api/cron/generate-content", request.url);
+            fetch(genUrl.toString(), {
               headers: { authorization: request.headers.get("authorization") || "" },
             }).catch(() => {});
-          } catch {
-            // Non-critical
-          }
+          } catch {}
         }
       }
     }
