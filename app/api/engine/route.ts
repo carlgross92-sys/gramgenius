@@ -27,6 +27,7 @@ export async function GET() {
 
     return Response.json({
       engine: engine || null,
+      jobs: recentJobs,
       recentJobs,
       stats: {
         queued,

@@ -16,18 +16,13 @@ export async function GET(request: Request) {
       return Response.json({ skipped: true, reason: "Engine not enabled" });
     }
 
-    // ── Find next queued job ────────────────────────────────────────────
-    const now = new Date();
+    // ── Find next queued job (process any queued job, ignore schedule) ──
     const job = await prisma.contentJob.findFirst({
       where: {
         status: "QUEUED",
         retryCount: { lt: 3 },
-        OR: [
-          { scheduledFor: { lte: now } },
-          { scheduledFor: null },
-        ],
       },
-      orderBy: { scheduledFor: "asc" },
+      orderBy: { createdAt: "asc" },
     });
 
     if (!job) {
@@ -37,7 +32,7 @@ export async function GET(request: Request) {
     // ── Mark as processing ──────────────────────────────────────────────
     await prisma.contentJob.update({
       where: { id: job.id },
-      data: { status: "PROCESSING", startedAt: now },
+      data: { status: "PROCESSING", startedAt: new Date() },
     });
 
     // ── Load brand profile ──────────────────────────────────────────────

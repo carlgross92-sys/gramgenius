@@ -26,15 +26,13 @@ export async function GET(request: Request) {
       );
     }
 
-    // ── Find next job ready to publish ──────────────────────────────────
-    const now = new Date();
+    // ── Find next completed job ready to publish ────────────────────────
     const job = await prisma.contentJob.findFirst({
       where: {
         status: "COMPLETED",
         instagramPostId: null,
-        scheduledFor: { lte: now },
       },
-      orderBy: { scheduledFor: "asc" },
+      orderBy: { createdAt: "asc" },
     });
 
     if (!job) {
