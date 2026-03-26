@@ -1,7 +1,7 @@
 import prisma from "@/lib/prisma";
 import { generateWithClaude } from "@/lib/anthropic";
 import { generateImage } from "@/lib/openai";
-import { textToSpeech, saveAudio } from "@/lib/elevenlabs";
+import { textToSpeech, saveAudio, generateVoiceoverScript } from "@/lib/elevenlabs";
 import {
   createImageContainer,
   createReelContainer,
@@ -274,6 +274,30 @@ export async function runMediaAgent(
   }
 
   // -----------------------------------------------------------------------
+  // Voice Quality Gate — retry once if voice is missing for video content
+  // -----------------------------------------------------------------------
+
+  if (input.postType === "REEL") {
+    if (!output.voiceoverUrl) {
+      // Retry once
+      console.log("[Media Agent] Voice missing — retrying ElevenLabs...");
+      try {
+        const retryScript = generateVoiceoverScript(input.topic, input.caption, animal);
+        const retryBuffer = await textToSpeech(retryScript);
+        const retryUrl = await saveAudio(retryBuffer);
+        output.voiceoverUrl = retryUrl;
+        output.voiceoverScript = retryScript;
+        console.log("[Media Agent] Voice retry succeeded");
+      } catch (retryErr) {
+        console.error("[Media Agent] Voice retry also failed");
+        output.warnings.push("VOICE_FAILED: Voiceover generation failed after retry. Video NOT released.");
+        // Do NOT proceed to auto-post
+        return output;
+      }
+    }
+  }
+
+  // -----------------------------------------------------------------------
   // Step 5: Save to MediaLibrary
   // -----------------------------------------------------------------------
 
@@ -338,12 +362,18 @@ export async function runMediaAgent(
   // -----------------------------------------------------------------------
 
   if (input.autoPost) {
-    // RULE: Never post a video without voiceover
-    if (input.postType === "REEL" && output.videoUrl && !output.voiceoverUrl) {
+    // VOICE GATE: Never post a REEL or VIDEO without voiceover
+    if (
+      input.postType === "REEL" &&
+      !output.voiceoverUrl
+    ) {
       output.warnings.push(
-        "Video saved as DRAFT — voiceover generation failed. Fix ElevenLabs credits then retry. Silent videos are not posted."
+        "VOICE_GATE_BLOCKED: No voiceover — video saved as draft, not posted"
       );
-      console.log("[Media Agent] Skipping Instagram post — no voiceover for REEL");
+      console.log(
+        "[Media Agent] VOICE GATE: Blocking auto-post — no voiceover for " +
+          input.postType
+      );
       return output;
     }
 

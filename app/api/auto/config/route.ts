@@ -43,19 +43,19 @@ export async function POST(request: Request) {
     } = body;
 
     // Validate numeric ranges
-    if (feedPostsPerDay !== undefined && (feedPostsPerDay < 1 || feedPostsPerDay > 7)) {
+    if (feedPostsPerDay !== undefined && (feedPostsPerDay < 1 || feedPostsPerDay > 30)) {
       return Response.json(
-        { error: "feedPostsPerDay must be between 1 and 7" },
+        { error: "feedPostsPerDay must be between 1 and 30" },
         { status: 400 }
       );
     }
-    if (reelsPerDay !== undefined && (reelsPerDay < 0 || reelsPerDay > 3)) {
+    if (reelsPerDay !== undefined && (reelsPerDay < 0 || reelsPerDay > 30)) {
       return Response.json(
-        { error: "reelsPerDay must be between 0 and 3" },
+        { error: "reelsPerDay must be between 0 and 30" },
         { status: 400 }
       );
     }
-    if (maxPostsPerDay !== undefined && (maxPostsPerDay < 1 || maxPostsPerDay > 10)) {
+    if (maxPostsPerDay !== undefined && (maxPostsPerDay < 1 || maxPostsPerDay > 30)) {
       return Response.json(
         { error: "maxPostsPerDay must be between 1 and 10" },
         { status: 400 }

@@ -49,6 +49,8 @@ export async function GET(request: Request) {
     let videoUrl: string | null = null;
     let imageUrl: string | null = null;
     let voiceoverUrl: string | null = null;
+    let voiceStatus: "OK" | "FAILED" | "RETRY_OK" | "MISSING" = "MISSING";
+    const modelUsed = "claude-sonnet + pexels + elevenlabs";
     const qualityNotes: string[] = [];
 
     // ── Step 1: Generate caption using Brand Brain + Prompt Templates ──
@@ -142,14 +144,18 @@ export async function GET(request: Request) {
           const voResult = await generateVoiceover(script);
           if (voResult.url) {
             voiceoverUrl = voResult.url;
+            voiceStatus = "OK";
             qualityNotes.push("voiceover: ok");
           } else {
+            voiceStatus = "FAILED";
             qualityNotes.push(`voiceover: skipped - ${voResult.error || "no url returned"}`);
           }
         } else {
+          voiceStatus = "FAILED";
           qualityNotes.push(`voiceover: skipped - low credits (${credits})`);
         }
       } catch (voErr) {
+        voiceStatus = "FAILED";
         qualityNotes.push(`voiceover: failed - ${voErr instanceof Error ? voErr.message : "unknown"}`);
       }
     }
@@ -164,10 +170,19 @@ export async function GET(request: Request) {
 
     const minScore = engine.minQualityScore ?? 70;
     let finalStatus = "COMPLETED";
+    let qualityFailed = false;
 
     if (qualityScore < minScore) {
       finalStatus = "QUALITY_FAILED";
+      qualityFailed = true;
       qualityNotes.push(`quality: ${qualityScore} < min ${minScore}`);
+    }
+
+    // Voice quality gate — NEVER release voiceless videos
+    if ((job.postType === "REEL" || job.mediaType === "video") && !voiceoverUrl) {
+      qualityNotes.push("VOICE_GATE: No voiceover — video blocked from posting");
+      qualityFailed = true;
+      finalStatus = "QUALITY_FAILED";
     }
 
     // If REEL without voiceover and voiceover is required, fail quality
@@ -177,6 +192,7 @@ export async function GET(request: Request) {
       engine.requireVoiceover
     ) {
       finalStatus = "QUALITY_FAILED";
+      qualityFailed = true;
       qualityNotes.push("quality: REEL requires voiceover");
     }
 
@@ -191,6 +207,8 @@ export async function GET(request: Request) {
         videoUrl,
         imageUrl,
         voiceoverUrl,
+        voiceStatus: voiceoverUrl ? "OK" : "FAILED",
+        modelUsed,
         qualityScore,
         qualityNotes: qualityNotes.join("; "),
         completedAt: new Date(),
@@ -216,6 +234,9 @@ export async function GET(request: Request) {
         });
 
         if (moreJobs > 0) {
+          // 5-second stagger delay to avoid rate limits with 30 jobs/day
+          await new Promise((resolve) => setTimeout(resolve, 5000));
+
           try {
             const nextUrl = new URL("/api/cron/process-queue", request.url);
             nextUrl.searchParams.set("chain", String(currentChain + 1));

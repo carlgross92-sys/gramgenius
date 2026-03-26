@@ -32,7 +32,10 @@ export async function GET() {
     });
 
     // ── Gather stats ────────────────────────────────────────────────────
-    const [queued, processing, completed, failed, postedToInstagram] =
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const [queued, processing, completed, failed, postedToInstagram, voiceFailed, postedToday] =
       await Promise.all([
         prisma.contentJob.count({ where: { status: "QUEUED" } }),
         prisma.contentJob.count({ where: { status: "PROCESSING" } }),
@@ -43,6 +46,12 @@ export async function GET() {
         prisma.contentJob.count({
           where: { instagramPostId: { not: null } },
         }),
+        prisma.contentJob.count({
+          where: { voiceStatus: "FAILED" },
+        }),
+        prisma.contentJob.count({
+          where: { instagramPostId: { not: null }, completedAt: { gte: today } },
+        }),
       ]);
 
     return Response.json({
@@ -52,6 +61,9 @@ export async function GET() {
       recentJobs,
       stats: {
         queued,
+        postedToday,
+        dailyTarget: engine?.postsPerDay || 30,
+        voiceFailed,
         processing,
         completed,
         failed,

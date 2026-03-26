@@ -373,7 +373,7 @@ export default function DashboardPage() {
               <input
                 type="range"
                 min={1}
-                max={7}
+                max={30}
                 value={engineConfig.feedPostsPerDay}
                 onChange={(e) =>
                   setEngineConfig((prev) => ({ ...prev, feedPostsPerDay: Number(e.target.value) }))
@@ -391,7 +391,7 @@ export default function DashboardPage() {
               <input
                 type="range"
                 min={0}
-                max={3}
+                max={30}
                 value={engineConfig.reelsPerDay}
                 onChange={(e) =>
                   setEngineConfig((prev) => ({ ...prev, reelsPerDay: Number(e.target.value) }))
@@ -409,7 +409,7 @@ export default function DashboardPage() {
               <input
                 type="range"
                 min={1}
-                max={10}
+                max={30}
                 value={engineConfig.maxPostsPerDay}
                 onChange={(e) =>
                   setEngineConfig((prev) => ({ ...prev, maxPostsPerDay: Number(e.target.value) }))

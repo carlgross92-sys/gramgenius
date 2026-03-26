@@ -201,7 +201,7 @@ model EngineConfig {
   enabled         Boolean   @default(true)
   feedPostsPerDay Int       @default(7)
   reelsPerDay     Int       @default(3)
-  maxPostsPerDay  Int       @default(10)
+  maxPostsPerDay  Int       @default(30)
   autoResearch    Boolean   @default(true)
   autoGenerate    Boolean   @default(true)
   autoPublish     Boolean   @default(true)
@@ -249,6 +249,8 @@ model ContentJob {
   voiceoverUrl    String?
   instagramPostId String?
   instagramUrl    String?
+  voiceStatus     String?
+  modelUsed       String?
   qualityScore    Int?
   qualityNotes    String?
   failReason      String?

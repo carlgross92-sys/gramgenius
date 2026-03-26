@@ -730,7 +730,7 @@ function ContinuousMode() {
         </div>
         <div>
           <label className="mb-1 block text-xs text-[#888]">Posts per day ({postsPerDay})</label>
-          <input type="range" min={1} max={10} value={postsPerDay}
+          <input type="range" min={1} max={30} value={postsPerDay}
             onChange={(e) => setPostsPerDay(Number(e.target.value))}
             className="w-full accent-[#f0b429]" />
         </div>
@@ -741,18 +741,22 @@ function ContinuousMode() {
         </GoldButton>
 
         {/* Queue Status */}
-        <div className="grid grid-cols-3 gap-2 text-center">
+        <div className="grid grid-cols-4 gap-2 text-center">
           <div className="rounded-lg bg-[#0a0a0a] p-2 border border-[#1f1f1f]">
-            <p className="text-lg font-bold text-[#22c55e]">{posted}</p>
-            <p className="text-xs text-[#888]">Posted</p>
+            <p className="text-lg font-bold text-[#22c55e]">{stats.postedToday || 0}/{stats.dailyTarget || 30}</p>
+            <p className="text-xs text-[#888]">Today</p>
           </div>
           <div className="rounded-lg bg-[#0a0a0a] p-2 border border-[#1f1f1f]">
             <p className="text-lg font-bold text-[#f0b429]">{queued}</p>
             <p className="text-xs text-[#888]">Queued</p>
           </div>
           <div className="rounded-lg bg-[#0a0a0a] p-2 border border-[#1f1f1f]">
-            <p className="text-lg font-bold text-[#ef4444]">{failed}</p>
-            <p className="text-xs text-[#888]">Failed</p>
+            <p className="text-lg font-bold text-[#22c55e]">{posted}</p>
+            <p className="text-xs text-[#888]">Total</p>
+          </div>
+          <div className="rounded-lg bg-[#0a0a0a] p-2 border border-[#1f1f1f]">
+            <p className="text-lg font-bold text-[#ef4444]">{stats.voiceFailed || 0}</p>
+            <p className="text-xs text-[#888]">Voice Fail</p>
           </div>
         </div>
 
@@ -768,6 +772,11 @@ function ContinuousMode() {
                   j.status === "QUEUED" ? "bg-[#888]" : "bg-[#ef4444]"
                 }`} />
                 <span className="flex-1 text-xs text-white truncate">{String(j.topic || "")}</span>
+                {j.voiceStatus ? (
+                  <span className={`text-[10px] ${j.voiceStatus === "OK" || j.voiceStatus === "RETRY_OK" ? "text-[#22c55e]" : "text-[#ef4444]"}`}>
+                    {j.voiceStatus === "OK" || j.voiceStatus === "RETRY_OK" ? "🔊" : "🔇"}
+                  </span>
+                ) : null}
                 {j.instagramUrl ? (
                   <a href={String(j.instagramUrl)} target="_blank" rel="noopener noreferrer" className="text-[10px] text-[#f0b429] hover:underline">IG</a>
                 ) : (
