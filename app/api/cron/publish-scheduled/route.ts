@@ -54,7 +54,8 @@ export async function GET(request: Request) {
     let instagramUrl: string | null = null;
 
     try {
-      if (job.postType === "REEL" && job.videoUrl) {
+      if (job.videoUrl) {
+        // Post any job with video as a REEL
         // ── Create Reel container ─────────────────────────────────────
         const containerRes = await fetch(`${META_BASE}/${igUserId}/media`, {
           method: "POST",
