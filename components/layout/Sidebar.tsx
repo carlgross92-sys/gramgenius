@@ -18,10 +18,12 @@ import {
   Handshake,
   Settings,
   ImageIcon,
+  Layers,
   Menu,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { BrandSwitcher } from "@/components/layout/BrandSwitcher";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, href: "/" },
@@ -37,6 +39,7 @@ const navItems = [
   { label: "Competitors", icon: Users, href: "/competitors" },
   { label: "Engagement", icon: MessageCircle, href: "/engage" },
   { label: "Collabs", icon: Handshake, href: "/collabs" },
+  { label: "My Brands", icon: Layers, href: "/brands" },
   { label: "Settings", icon: Settings, href: "/settings" },
 ];
 
@@ -74,6 +77,11 @@ function Sidebar() {
         <div className="flex flex-col px-6 py-6">
           <span className="text-xl font-bold text-[#f0b429]">GramGenius</span>
           <span className="text-sm text-[#888888]">AI Growth Engine</span>
+        </div>
+
+        {/* Brand Switcher */}
+        <div className="px-3 pb-3">
+          <BrandSwitcher />
         </div>
 
         {/* Navigation */}

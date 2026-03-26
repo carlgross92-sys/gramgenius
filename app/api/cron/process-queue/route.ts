@@ -3,6 +3,7 @@ import { generateWithClaudeJSON, generateWithClaude } from "@/lib/anthropic";
 import { searchAnimalVideo, downloadAndSaveVideo } from "@/lib/pexels";
 import { generateImage } from "@/lib/openai";
 import { checkCredits, generateVoiceoverScript, generateVoiceover } from "@/lib/elevenlabs";
+import { buildCaptionPrompt, buildVoiceoverPrompt, type ReelStyle } from "@/lib/prompt-templates";
 
 export const maxDuration = 300;
 
@@ -50,22 +51,21 @@ export async function GET(request: Request) {
     let voiceoverUrl: string | null = null;
     const qualityNotes: string[] = [];
 
-    // ── Step 1: Generate caption using Brand Brain ────────────────────
+    // ── Step 1: Generate caption using Brand Brain + Prompt Templates ──
+    const reelStyle = (job.reelStyle || "funny") as ReelStyle;
     try {
+      const captionPrompt = buildCaptionPrompt({
+        brandName: brand?.name || "Funny Animals",
+        brandHandle,
+        niche: brandNiche,
+        pillar: job.topic,
+        brandVoice,
+        reelStyle,
+        topic: job.topic,
+        targetAudience: brandAudience,
+      });
       caption = await generateWithClaude(
-        `You write Instagram captions for @${brandHandle}.
-Brand voice: ${brandVoice}
-Target audience: ${brandAudience}
-Niche: ${brandNiche}
-
-Rules:
-- Match the ${brandVoice.toLowerCase()} brand voice EXACTLY
-- Hook in the first line that stops the scroll
-- Keep it 100-200 words max
-- Include a CTA (tag someone, follow, comment)
-- Be relatable for ${brandAudience}
-- NO hashtags in the caption
-- Use 1-3 emojis max`,
+        captionPrompt,
         `Write a ${brandVoice.toLowerCase()} caption for: "${job.topic}"`,
         512
       );

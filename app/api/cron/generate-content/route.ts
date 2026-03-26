@@ -126,6 +126,8 @@ Return ONLY a JSON array of ${count} strings.`,
           topic: topicList[i],
           postType,
           mediaType: engine.mediaType,
+          reelStyle: engine.reelStyle || "funny",
+          brandProfileId: brand.id,
           scheduledFor: scheduleTimes[i] || null,
         },
       });

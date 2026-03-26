@@ -241,6 +241,7 @@ model ContentJob {
   animal          String?
   postType        String    @default("REEL")
   mediaType       String    @default("video")
+  reelStyle       String    @default("funny")
   caption         String?
   hashtags        String?
   videoUrl        String?
@@ -256,6 +257,7 @@ model ContentJob {
   scheduledFor    DateTime?
   startedAt       DateTime?
   completedAt     DateTime?
+  brandProfileId  String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 }
@@ -267,6 +269,7 @@ model ContinuousEngine {
   postsPerDay      Int       @default(7)
   reelsPerDay      Int       @default(5)
   mediaType        String    @default("video")
+  reelStyle        String    @default("funny")
   requireVoiceover Boolean   @default(true)
   minQualityScore  Int       @default(70)
   lastRunAt        DateTime?
@@ -275,6 +278,7 @@ model ContinuousEngine {
   totalFailed      Int       @default(0)
   todayPosted      Int       @default(0)
   todayDate        String?
+  brandProfileId   String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 }

@@ -49,6 +49,7 @@ export default function SwarmStudioPage() {
   const [topic, setTopic] = useState("");
   const [postType, setPostType] = useState("FEED");
   const [postGoal, setPostGoal] = useState("engagement");
+  const [reelStyle, setReelStyle] = useState("funny");
   const [mediaType, setMediaType] = useState<"image" | "video" | "both">("image");
   const [subject, setSubject] = useState("");
   const [autoPost, setAutoPost] = useState(false);
@@ -86,7 +87,7 @@ export default function SwarmStudioPage() {
       const res = await fetch("/api/swarm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic, postType, postGoal, autoPost, mediaType, subject }),
+        body: JSON.stringify({ topic, postType, postGoal, autoPost, mediaType, subject, reelStyle }),
       });
 
       const data = await res.json();
@@ -194,6 +195,17 @@ export default function SwarmStudioPage() {
                     <SelectItem value="growth">Growth</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm text-[#888]">Reel Style</label>
+                <div className="grid grid-cols-4 gap-1">
+                  {(["funny", "inspirational", "educational", "dramatic"] as const).map((s) => (
+                    <button key={s} onClick={() => setReelStyle(s)}
+                      className={`rounded-lg border px-2 py-2 text-xs capitalize transition ${
+                        reelStyle === s ? "border-[#f0b429] bg-[#f0b429]/10 text-[#f0b429]" : "border-[#1f1f1f] bg-[#0a0a0a] text-[#888] hover:text-white"
+                      }`}>{s === "funny" ? "😂 Funny" : s === "inspirational" ? "✨ Inspire" : s === "educational" ? "📚 Educate" : "🎬 Drama"}</button>
+                  ))}
+                </div>
               </div>
               <div>
                 <label className="mb-1 block text-sm text-[#888]">Media Type</label>
