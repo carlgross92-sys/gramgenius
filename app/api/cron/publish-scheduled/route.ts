@@ -26,11 +26,15 @@ export async function GET(request: Request) {
       );
     }
 
-    // ── Find next completed job ready to publish ────────────────────────
+    // ── Find next completed job ready to publish (must have media) ──────
     const job = await prisma.contentJob.findFirst({
       where: {
         status: "COMPLETED",
         instagramPostId: null,
+        OR: [
+          { videoUrl: { not: null } },
+          { imageUrl: { not: null } },
+        ],
       },
       orderBy: { createdAt: "asc" },
     });
