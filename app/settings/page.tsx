@@ -83,9 +83,13 @@ interface DiscoveredAccount {
 
 interface MetaConnection {
   connected: boolean;
+  tokenExpired?: boolean;
   userName: string;
   pages: { id: string; name: string; hasInstagram: boolean; igUsername: string | null; igFollowers: number | null }[];
   autoDiscovered: DiscoveredAccount | null;
+  tokenExpiresAt?: string | null;
+  daysUntilExpiry?: number | null;
+  needsRefresh?: boolean;
 }
 
 interface HealthCheck {
@@ -139,9 +143,10 @@ export default function SettingsPage() {
         const res = await fetch("/api/settings/meta");
         if (res.ok) {
           const data = await res.json();
-          if (data.connected) {
+          if (data.connected || data.hasToken) {
             setMetaConnection({
-              connected: true,
+              connected: data.connected,
+              tokenExpired: data.tokenExpired || false,
               userName: data.userName || "",
               pages: [],
               autoDiscovered: data.instagramBusinessId ? {
@@ -152,6 +157,9 @@ export default function SettingsPage() {
                 pageId: data.facebookPageId || "",
                 pageName: "",
               } : null,
+              tokenExpiresAt: data.tokenExpiresAt || null,
+              daysUntilExpiry: data.daysUntilExpiry ?? null,
+              needsRefresh: data.needsRefresh || false,
             });
           }
         }
@@ -414,8 +422,70 @@ export default function SettingsPage() {
                           </p>
                         </div>
                       )}
+
+                    {/* Token expiry status */}
+                    <div className="mt-4 rounded-lg bg-[#0a0a0a] p-3 border border-[#1f1f1f]">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs text-[#888]">Token Status</p>
+                          {metaConnection.daysUntilExpiry !== null && metaConnection.daysUntilExpiry !== undefined ? (
+                            <p className={`text-sm font-medium ${
+                              metaConnection.daysUntilExpiry <= 0 ? "text-[#ef4444]" :
+                              metaConnection.daysUntilExpiry <= 10 ? "text-[#f59e0b]" :
+                              "text-[#22c55e]"
+                            }`}>
+                              {metaConnection.daysUntilExpiry <= 0
+                                ? "Expired"
+                                : `Expires in ${metaConnection.daysUntilExpiry} days`}
+                            </p>
+                          ) : (
+                            <p className="text-sm text-[#888]">Expiry unknown</p>
+                          )}
+                          {metaConnection.tokenExpiresAt ? (
+                            <p className="text-xs text-[#888]">
+                              {new Date(metaConnection.tokenExpiresAt).toLocaleDateString()}
+                            </p>
+                          ) : null}
+                        </div>
+                        <button
+                          onClick={async () => {
+                            try {
+                              const res = await fetch("/api/settings/meta", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ action: "refresh" }),
+                              });
+                              const data = await res.json();
+                              if (data.refreshed) {
+                                window.location.reload();
+                              } else {
+                                setConnectionError(data.error || "Refresh failed");
+                              }
+                            } catch {
+                              setConnectionError("Refresh failed");
+                            }
+                          }}
+                          className="rounded-lg border border-[#1f1f1f] bg-[#0a0a0a] px-3 py-1.5 text-xs text-[#f0b429] hover:bg-[#1a1a1a]"
+                        >
+                          Refresh Token
+                        </button>
+                      </div>
+                    </div>
                   </DarkCard>
                 )}
+
+                {/* Token expired warning */}
+                {metaConnection && metaConnection.tokenExpired && !metaConnection.connected ? (
+                  <div className="rounded-lg border border-[#ef4444]/30 bg-[#ef4444]/10 p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <AlertTriangle className="h-5 w-5 text-[#ef4444]" />
+                      <h4 className="font-semibold text-[#ef4444]">Token Expired</h4>
+                    </div>
+                    <p className="text-sm text-[#ef4444]/80 mb-3">
+                      Your Meta access token has expired. Generate a new one and paste it above to reconnect.
+                    </p>
+                  </div>
+                ) : null}
               </div>
 
               <Separator className="my-6 bg-[#1f1f1f]" />

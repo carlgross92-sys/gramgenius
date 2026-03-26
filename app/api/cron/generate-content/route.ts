@@ -28,6 +28,25 @@ export async function GET(request: Request) {
       });
     }
 
+    // ── Auto-refresh Meta token if expiring soon ────────────────────────
+    try {
+      const appSettings = await prisma.appSettings.findFirst();
+      if (appSettings?.metaTokenExpiresAt) {
+        const daysLeft = Math.floor(
+          (new Date(appSettings.metaTokenExpiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+        );
+        if (daysLeft <= 10 && daysLeft > 0) {
+          console.log(`[Engine] Meta token expires in ${daysLeft} days — attempting refresh`);
+          const refreshUrl = new URL("/api/settings/meta", request.url).toString();
+          await fetch(refreshUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "refresh" }),
+          }).catch(() => {});
+        }
+      }
+    } catch { /* non-critical */ }
+
     // ── Load brand profile ──────────────────────────────────────────────
     const brand = await prisma.brandProfile.findFirst();
     if (!brand) {
