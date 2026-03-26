@@ -233,3 +233,48 @@ model EngineLog {
   errors         String   @default("[]")
   durationMs     Int      @default(0)
 }
+
+model ContentJob {
+  id              String    @id @default(cuid())
+  status          String    @default("QUEUED")
+  topic           String
+  animal          String?
+  postType        String    @default("REEL")
+  mediaType       String    @default("video")
+  caption         String?
+  hashtags        String?
+  videoUrl        String?
+  imageUrl        String?
+  voiceoverUrl    String?
+  instagramPostId String?
+  instagramUrl    String?
+  qualityScore    Int?
+  qualityNotes    String?
+  failReason      String?
+  retryCount      Int       @default(0)
+  maxRetries      Int       @default(3)
+  scheduledFor    DateTime?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model ContinuousEngine {
+  id               String    @id @default(cuid())
+  enabled          Boolean   @default(false)
+  theme            String?
+  postsPerDay      Int       @default(7)
+  reelsPerDay      Int       @default(5)
+  mediaType        String    @default("video")
+  requireVoiceover Boolean   @default(true)
+  minQualityScore  Int       @default(70)
+  lastRunAt        DateTime?
+  nextRunAt        DateTime?
+  totalPosted      Int       @default(0)
+  totalFailed      Int       @default(0)
+  todayPosted      Int       @default(0)
+  todayDate        String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}

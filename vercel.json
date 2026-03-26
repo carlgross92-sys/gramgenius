@@ -1,18 +1,15 @@
 {
   "functions": {
-    "app/api/swarm/route.ts": {
-      "maxDuration": 300
-    },
-    "app/api/auto/daily-engine/route.ts": {
-      "maxDuration": 300
-    },
-    "app/api/auto/continuous/route.ts": {
-      "maxDuration": 300
-    }
+    "app/api/cron/generate-content/route.ts": { "maxDuration": 300 },
+    "app/api/cron/process-queue/route.ts": { "maxDuration": 300 },
+    "app/api/cron/publish-scheduled/route.ts": { "maxDuration": 120 },
+    "app/api/cron/quality-check/route.ts": { "maxDuration": 60 },
+    "app/api/swarm/route.ts": { "maxDuration": 300 },
+    "app/api/auto/continuous/route.ts": { "maxDuration": 300 }
   },
   "crons": [
     {
-      "path": "/api/auto/daily-engine",
+      "path": "/api/cron/generate-content",
       "schedule": "0 14 * * *"
     }
   ]

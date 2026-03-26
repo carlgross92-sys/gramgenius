@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { GoldButton } from "@/components/ui/GoldButton";
 import { DarkCard } from "@/components/ui/DarkCard";
 import { Textarea } from "@/components/ui/textarea";
@@ -616,171 +616,141 @@ export default function SwarmStudioPage() {
   );
 }
 
-// ─── Continuous Mode Component ──────────────────────────────────────────────
+// ─── Server-Side Autopilot Engine Panel ─────────────────────────────────────
 
 function ContinuousMode() {
-  const [enabled, setEnabled] = useState(false);
+  const [engine, setEngine] = useState<Record<string, unknown> | null>(null);
+  const [jobs, setJobs] = useState<Array<Record<string, unknown>>>([]);
+  const [stats, setStats] = useState<Record<string, number>>({});
   const [theme, setTheme] = useState("");
-  const [postsPerDay, setPostsPerDay] = useState(3);
-  const [contMediaType, setContMediaType] = useState<"image" | "video" | "both">("image");
-  const [schedule, setSchedule] = useState<"immediate" | "scheduled" | "queue">("queue");
-  const [running, setRunning] = useState(false);
-  const [progress, setProgress] = useState<{
-    total: number;
-    succeeded: number;
-    failed: number;
-    results: Array<{ topic: string; status: string; imageUrl?: string; errors: string[] }>;
-  } | null>(null);
+  const [postsPerDay, setPostsPerDay] = useState(7);
+  const [saving, setSaving] = useState(false);
+  const [starting, setStarting] = useState(false);
 
-  async function startContinuous() {
-    setRunning(true);
-    setProgress(null);
+  const loadStatus = async () => {
     try {
-      const res = await fetch("/api/auto/continuous", {
+      const res = await fetch("/api/engine");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.engine) {
+          setEngine(data.engine);
+          setTheme(String(data.engine.theme || ""));
+          setPostsPerDay(Number(data.engine.postsPerDay) || 7);
+        }
+        setJobs(data.jobs || []);
+        setStats(data.stats || {});
+      }
+    } catch { /* silent */ }
+  };
+
+  useEffect(() => {
+    loadStatus();
+    const interval = setInterval(loadStatus, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const toggleEngine = async () => {
+    setSaving(true);
+    const newEnabled = !engine?.enabled;
+    try {
+      await fetch("/api/engine", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ theme: theme || undefined, postsPerDay, mediaType: contMediaType, schedule }),
+        body: JSON.stringify({ enabled: newEnabled, theme: theme || null, postsPerDay }),
       });
-      const data = await res.json();
-      if (data.error) {
-        setProgress({ total: 0, succeeded: 0, failed: 1, results: [{ topic: "", status: "failed", errors: [data.error] }] });
-      } else {
-        setProgress(data);
+      if (newEnabled) {
+        setStarting(true);
+        await fetch("/api/cron/generate-content");
+        setStarting(false);
       }
-    } catch (e) {
-      setProgress({ total: 0, succeeded: 0, failed: 1, results: [{ topic: "", status: "failed", errors: [e instanceof Error ? e.message : "Failed"] }] });
-    } finally {
-      setRunning(false);
-    }
-  }
+      await loadStatus();
+    } catch { /* silent */ }
+    setSaving(false);
+  };
 
-  if (!enabled) {
-    return (
-      <DarkCard>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-lg">🔄</span>
-            <div>
-              <p className="text-sm font-medium text-white">Continuous Mode</p>
-              <p className="text-xs text-[#888]">Auto-create content based on theme</p>
-            </div>
-          </div>
-          <button
-            onClick={() => setEnabled(true)}
-            className="rounded-full bg-[#333] px-3 py-1 text-xs text-[#888] hover:text-white"
-          >
-            Enable
-          </button>
-        </div>
-      </DarkCard>
-    );
-  }
+  const isEnabled = !!engine?.enabled;
+  const posted = stats.postedToInstagram || 0;
+  const queued = stats.queued || 0;
+  const failed = stats.failed || 0;
 
   return (
-    <DarkCard className="border-[#f0b429]/20">
+    <DarkCard className={isEnabled ? "border-[#22c55e]/30" : ""}>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <span className="text-lg">🔄</span>
-          <h3 className="text-sm font-semibold text-[#f0b429]">CONTINUOUS MODE</h3>
+          {isEnabled ? (
+            <span className="relative flex h-3 w-3">
+              <span className="absolute inline-flex h-full w-full animate-pulse rounded-full bg-[#22c55e] opacity-75" />
+              <span className="relative inline-flex h-3 w-3 rounded-full bg-[#22c55e]" />
+            </span>
+          ) : null}
+          <h3 className="text-sm font-bold text-white">AUTOPILOT ENGINE</h3>
         </div>
-        <button
-          onClick={() => setEnabled(false)}
-          className="rounded-full bg-[#f0b429] px-3 py-1 text-xs font-bold text-black"
-        >
-          ON
-        </button>
+        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${isEnabled ? "bg-[#22c55e]/20 text-[#22c55e]" : "bg-[#333] text-[#888]"}`}>
+          {isEnabled ? "RUNNING" : "STOPPED"}
+        </span>
       </div>
+      <p className="text-xs text-[#888] mb-3">Runs on server 24/7 — works even when app is closed</p>
 
       <div className="flex flex-col gap-3">
         <div>
           <label className="mb-1 block text-xs text-[#888]">Theme (optional)</label>
-          <input
-            value={theme}
-            onChange={(e) => setTheme(e.target.value)}
-            placeholder='e.g. "funny dogs" or leave blank for auto'
-            className="w-full rounded-lg border border-[#1f1f1f] bg-[#0a0a0a] px-3 py-2 text-sm text-white placeholder:text-[#555]"
-          />
+          <input value={theme} onChange={(e) => setTheme(e.target.value)}
+            placeholder="Leave blank to use Brand Brain pillars"
+            className="w-full rounded-lg border border-[#1f1f1f] bg-[#0a0a0a] px-3 py-2 text-sm text-white placeholder:text-[#555]" />
         </div>
-
-        <div className="flex gap-4">
-          <div className="flex-1">
-            <label className="mb-1 block text-xs text-[#888]">Posts ({postsPerDay})</label>
-            <input
-              type="range" min={1} max={7} value={postsPerDay}
-              onChange={(e) => setPostsPerDay(Number(e.target.value))}
-              className="w-full accent-[#f0b429]"
-            />
-          </div>
-          <div className="flex-1">
-            <label className="mb-1 block text-xs text-[#888]">Media</label>
-            <div className="flex gap-1">
-              {(["image", "video", "both"] as const).map((t) => (
-                <button key={t} onClick={() => setContMediaType(t)}
-                  className={`rounded px-2 py-1 text-xs capitalize ${contMediaType === t ? "bg-[#f0b429]/20 text-[#f0b429]" : "bg-[#0a0a0a] text-[#888]"}`}
-                >{t}</button>
-              ))}
-            </div>
-          </div>
-        </div>
-
         <div>
-          <label className="mb-1 block text-xs text-[#888]">Schedule</label>
-          <div className="flex flex-col gap-1">
-            {(["immediate", "scheduled", "queue"] as const).map((s) => (
-              <label key={s} className="flex items-center gap-2 text-sm text-white cursor-pointer">
-                <input
-                  type="radio" name="schedule" checked={schedule === s}
-                  onChange={() => setSchedule(s)}
-                  className="accent-[#f0b429]"
-                />
-                {s === "immediate" ? "Post immediately" : s === "scheduled" ? "Schedule at best times" : "Add to queue"}
-              </label>
-            ))}
-          </div>
+          <label className="mb-1 block text-xs text-[#888]">Posts per day ({postsPerDay})</label>
+          <input type="range" min={1} max={10} value={postsPerDay}
+            onChange={(e) => setPostsPerDay(Number(e.target.value))}
+            className="w-full accent-[#f0b429]" />
         </div>
 
-        <GoldButton onClick={startContinuous} disabled={running} className="w-full">
-          {running ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Zap className="h-4 w-4 mr-2" />}
-          {running ? `Creating ${postsPerDay} posts...` : "Start Continuous Mode"}
+        <GoldButton onClick={toggleEngine} disabled={saving || starting} className="w-full">
+          {saving || starting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Zap className="h-4 w-4 mr-2" />}
+          {starting ? "Starting engine..." : isEnabled ? "Stop Engine" : "Start Engine"}
         </GoldButton>
 
-        {/* Progress */}
-        {running && (
-          <div className="rounded-lg bg-[#0a0a0a] p-3 border border-[#1f1f1f]">
-            <div className="flex items-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin text-[#f0b429]" />
-              <span className="text-sm text-white">Generating content...</span>
-            </div>
-            <p className="text-xs text-[#888] mt-1">This may take several minutes for {postsPerDay} posts</p>
+        {/* Queue Status */}
+        <div className="grid grid-cols-3 gap-2 text-center">
+          <div className="rounded-lg bg-[#0a0a0a] p-2 border border-[#1f1f1f]">
+            <p className="text-lg font-bold text-[#22c55e]">{posted}</p>
+            <p className="text-xs text-[#888]">Posted</p>
           </div>
-        )}
+          <div className="rounded-lg bg-[#0a0a0a] p-2 border border-[#1f1f1f]">
+            <p className="text-lg font-bold text-[#f0b429]">{queued}</p>
+            <p className="text-xs text-[#888]">Queued</p>
+          </div>
+          <div className="rounded-lg bg-[#0a0a0a] p-2 border border-[#1f1f1f]">
+            <p className="text-lg font-bold text-[#ef4444]">{failed}</p>
+            <p className="text-xs text-[#888]">Failed</p>
+          </div>
+        </div>
 
-        {/* Results */}
-        {progress && !running && (
-          <div className="rounded-lg bg-[#0a0a0a] p-3 border border-[#1f1f1f]">
-            <div className="flex items-center gap-2 mb-2">
-              <CheckCircle className="h-4 w-4 text-[#22c55e]" />
-              <span className="text-sm text-white">
-                {progress.succeeded}/{progress.total} posts created
-              </span>
-            </div>
-            <div className="flex flex-col gap-2 max-h-48 overflow-y-auto">
-              {(progress.results || []).map((r, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  {r.imageUrl ? (
-                    <img src={r.imageUrl} alt="" className="h-8 w-8 rounded object-cover" />
-                  ) : (
-                    <div className="h-8 w-8 rounded bg-[#1f1f1f]" />
-                  )}
-                  <span className="flex-1 text-xs text-white truncate">{r.topic}</span>
-                  <span className={`text-xs ${r.status === "failed" ? "text-[#ef4444]" : "text-[#22c55e]"}`}>
-                    {r.status}
-                  </span>
-                </div>
-              ))}
-            </div>
+        {/* Recent Jobs */}
+        {jobs.length > 0 ? (
+          <div className="flex flex-col gap-1 max-h-48 overflow-y-auto">
+            {jobs.slice(0, 10).map((j, i) => (
+              <div key={i} className="flex items-center gap-2 rounded bg-[#0a0a0a] p-2 border border-[#1f1f1f]">
+                <span className={`h-2 w-2 rounded-full ${
+                  j.status === "COMPLETED" && j.instagramPostId ? "bg-[#22c55e]" :
+                  j.status === "COMPLETED" ? "bg-[#f0b429]" :
+                  j.status === "PROCESSING" ? "bg-[#f0b429] animate-pulse" :
+                  j.status === "QUEUED" ? "bg-[#888]" : "bg-[#ef4444]"
+                }`} />
+                <span className="flex-1 text-xs text-white truncate">{String(j.topic || "")}</span>
+                {j.instagramUrl ? (
+                  <a href={String(j.instagramUrl)} target="_blank" rel="noopener noreferrer" className="text-[10px] text-[#f0b429] hover:underline">IG</a>
+                ) : (
+                  <span className="text-[10px] text-[#888]">{String(j.status || "")}</span>
+                )}
+              </div>
+            ))}
           </div>
-        )}
+        ) : null}
+
+        <button onClick={loadStatus} className="text-xs text-[#888] hover:text-white">
+          Refresh Status
+        </button>
       </div>
     </DarkCard>
   );
