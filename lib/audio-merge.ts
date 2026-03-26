@@ -78,12 +78,26 @@ export async function mergeAudioWithVideo(
     console.log(`[AudioMerge] Command: ${cmd}`);
 
     try {
-      execSync(cmd, { timeout: 120000, stdio: "pipe" });
-    } catch (execErr) {
+      const result = execSync(cmd, { timeout: 120000, stdio: "pipe" });
+      console.log("[AudioMerge] Primary merge succeeded");
+    } catch (execErr: unknown) {
+      const stderr = (execErr as { stderr?: Buffer })?.stderr?.toString() || "";
+      console.error("[AudioMerge] Primary failed:", stderr.substring(0, 500));
       // Try without -map flags (simpler merge)
-      console.log("[AudioMerge] Primary command failed, trying simple merge...");
-      const simpleCmd = `"${ffmpegPath}" -i "${videoPath}" -i "${audioPath}" -c:v copy -c:a aac -shortest -y "${outputPath}"`;
-      execSync(simpleCmd, { timeout: 120000, stdio: "pipe" });
+      console.log("[AudioMerge] Trying simple merge (no -map)...");
+      try {
+        const simpleCmd = `"${ffmpegPath}" -i "${videoPath}" -i "${audioPath}" -c:v copy -c:a aac -shortest -y "${outputPath}"`;
+        execSync(simpleCmd, { timeout: 120000, stdio: "pipe" });
+        console.log("[AudioMerge] Simple merge succeeded");
+      } catch (simpleErr: unknown) {
+        const stderr2 = (simpleErr as { stderr?: Buffer })?.stderr?.toString() || "";
+        console.error("[AudioMerge] Simple also failed:", stderr2.substring(0, 500));
+        // Last resort: try with re-encoding video too
+        console.log("[AudioMerge] Trying full re-encode...");
+        const reencodeCmd = `"${ffmpegPath}" -i "${videoPath}" -i "${audioPath}" -c:v libx264 -c:a aac -shortest -y "${outputPath}"`;
+        execSync(reencodeCmd, { timeout: 180000, stdio: "pipe" });
+        console.log("[AudioMerge] Re-encode merge succeeded");
+      }
     }
 
     // Step 5: Verify output
