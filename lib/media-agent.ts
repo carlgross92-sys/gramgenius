@@ -298,6 +298,35 @@ export async function runMediaAgent(
   }
 
   // -----------------------------------------------------------------------
+  // Step 4B: MERGE AUDIO INTO VIDEO (the critical step!)
+  // Without this, videos post to Instagram with no voiceover.
+  // -----------------------------------------------------------------------
+
+  if (output.videoUrl && output.voiceoverUrl) {
+    try {
+      console.log("[Media Agent] Merging voiceover into video...");
+      const { mergeAudioWithVideo } = await import("@/lib/audio-merge");
+      const { mergedUrl } = await mergeAudioWithVideo(
+        output.videoUrl,
+        output.voiceoverUrl,
+        `merged-${Date.now()}`
+      );
+      console.log(`[Media Agent] Audio merge SUCCESS: ${mergedUrl}`);
+      // Replace the video URL with the merged version
+      output.videoUrl = mergedUrl;
+    } catch (mergeErr) {
+      const msg = mergeErr instanceof Error ? mergeErr.message : "Audio merge failed";
+      console.error(`[Media Agent] Audio merge FAILED: ${msg}`);
+      output.warnings.push(`Audio merge failed: ${msg}. Video has no voiceover.`);
+      // If merge fails for a REEL, don't post the silent video
+      if (input.postType === "REEL") {
+        output.warnings.push("VOICE_GATE_BLOCKED: Merge failed — silent video not released.");
+        return output;
+      }
+    }
+  }
+
+  // -----------------------------------------------------------------------
   // Step 5: Save to MediaLibrary
   // -----------------------------------------------------------------------
 
