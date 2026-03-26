@@ -298,18 +298,30 @@ export async function runMediaAgent(
   }
 
   // -----------------------------------------------------------------------
-  // Step 4B: Audio merge note
-  // Vercel serverless can't run ffmpeg natively. The Pexels video has
-  // its own ambient animal sounds. The ElevenLabs voiceover is provided
-  // as a separate downloadable MP3. For combined video+voiceover, the
-  // user can merge in CapCut or any video editor.
-  // The video DOES post to Instagram (with Pexels ambient audio).
+  // Step 4B: Merge voiceover INTO video using ffmpeg
+  // Downloads static ffmpeg binary to /tmp on first run, then merges.
   // -----------------------------------------------------------------------
 
   if (output.videoUrl && output.voiceoverUrl) {
-    console.log("[Media Agent] Video + voiceover both generated successfully");
-    console.log("[Media Agent] Video (with ambient sound):", output.videoUrl?.substring(0, 60));
-    console.log("[Media Agent] Voiceover (separate MP3):", output.voiceoverUrl?.substring(0, 60));
+    try {
+      console.log("[Media Agent] Merging voiceover into video...");
+      const { mergeAudioWithVideo } = await import("@/lib/audio-merge");
+      const { mergedUrl, merged } = await mergeAudioWithVideo(
+        output.videoUrl,
+        output.voiceoverUrl,
+        `merged-${Date.now()}`
+      );
+      if (merged) {
+        console.log(`[Media Agent] Audio merge SUCCESS — voiceover baked into video`);
+        output.videoUrl = mergedUrl;
+      } else {
+        console.log("[Media Agent] Audio merge skipped — posting video with ambient sound only");
+        output.warnings.push("Voiceover generated but not merged into video (ffmpeg unavailable). Video has ambient animal sounds.");
+      }
+    } catch (mergeErr) {
+      console.error("[Media Agent] Merge error:", mergeErr);
+      output.warnings.push("Audio merge attempted but failed. Video posts with ambient sound.");
+    }
   }
 
   // -----------------------------------------------------------------------
