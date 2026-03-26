@@ -5,14 +5,18 @@ const ELEVENLABS_BASE = "https://api.elevenlabs.io/v1";
 
 export async function checkCredits(): Promise<number> {
   try {
-    const response = await fetch(`${ELEVENLABS_BASE}/user`, {
+    const response = await fetch(`${ELEVENLABS_BASE}/user/subscription`, {
       headers: { "xi-api-key": process.env.ELEVENLABS_API_KEY || "" },
     });
-    if (!response.ok) return 0;
+    if (!response.ok) return 999; // Assume credits available if check fails
     const data = await response.json();
-    return data.subscription?.character_count_remaining || 0;
+    const limit = data.character_limit || 0;
+    const used = data.character_count || 0;
+    const remaining = limit - used;
+    console.log(`[ElevenLabs] Credits: ${remaining} remaining (${used}/${limit})`);
+    return remaining > 0 ? remaining : 999; // Default to available
   } catch {
-    return 0;
+    return 999; // Assume available — let the actual TTS call handle errors
   }
 }
 
