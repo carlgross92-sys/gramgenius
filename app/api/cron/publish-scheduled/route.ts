@@ -68,8 +68,9 @@ export async function GET(request: Request) {
           }),
         });
         const containerData = await containerRes.json();
+        console.log(`[Publish] Container response: ${JSON.stringify(containerData).substring(0, 200)}`);
         if (containerData.error) {
-          throw new Error(containerData.error.message || "Failed to create reel container");
+          throw new Error(`Container creation: ${containerData.error.message || JSON.stringify(containerData.error)}`);
         }
         const containerId = containerData.id;
 
@@ -89,7 +90,7 @@ export async function GET(request: Request) {
             break;
           }
           if (statusData.status_code === "ERROR") {
-            throw new Error("Reel container processing failed");
+            throw new Error(`Reel container ERROR: ${JSON.stringify(statusData).substring(0, 200)}`);
           }
 
           await new Promise((r) => setTimeout(r, 3000));
