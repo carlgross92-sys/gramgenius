@@ -37,8 +37,10 @@ export async function GET(request: Request) {
 
     // ── Load brand profile ──────────────────────────────────────────────
     const brand = await prisma.brandProfile.findFirst();
-    const brandName = brand?.instagramHandle || "funny animals";
-    const brandNiche = brand?.niche || "funny animal content";
+    const brandHandle = brand?.instagramHandle || "funny_animals";
+    const brandVoice = brand?.brandVoice || "Humorous";
+    const brandAudience = brand?.targetAudience || "animal lovers 18-45";
+    const brandNiche = brand?.niche || "funny animals";
 
     let caption: string | null = null;
     let hashtags: string | null = null;
@@ -48,11 +50,23 @@ export async function GET(request: Request) {
     let voiceoverUrl: string | null = null;
     const qualityNotes: string[] = [];
 
-    // ── Step 1: Generate caption ────────────────────────────────────────
+    // ── Step 1: Generate caption using Brand Brain ────────────────────
     try {
       caption = await generateWithClaude(
-        `You write short, punchy Instagram captions for @${brandName} in the ${brandNiche} niche. Keep it under 150 characters. Include a call-to-action like "Follow for more" or "Tag someone who needs this". No hashtags.`,
-        `Write a caption for this topic: ${job.topic}`,
+        `You write Instagram captions for @${brandHandle}.
+Brand voice: ${brandVoice}
+Target audience: ${brandAudience}
+Niche: ${brandNiche}
+
+Rules:
+- Match the ${brandVoice.toLowerCase()} brand voice EXACTLY
+- Hook in the first line that stops the scroll
+- Keep it 100-200 words max
+- Include a CTA (tag someone, follow, comment)
+- Be relatable for ${brandAudience}
+- NO hashtags in the caption
+- Use 1-3 emojis max`,
+        `Write a ${brandVoice.toLowerCase()} caption for: "${job.topic}"`,
         512
       );
       caption = caption.replace(/^["']|["']$/g, "").trim();

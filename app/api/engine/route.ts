@@ -5,6 +5,26 @@ export async function GET() {
     // ── Load engine config ──────────────────────────────────────────────
     const engine = await prisma.continuousEngine.findFirst();
 
+    // ── Load brand profile ────────────────────────────────────────────
+    const brand = await prisma.brandProfile.findFirst();
+    let brandInfo = null;
+    if (brand) {
+      let parsedPillars: string[] = [];
+      try { parsedPillars = JSON.parse(brand.contentPillars); } catch { parsedPillars = []; }
+      let parsedTimes: unknown[] = [];
+      try { parsedTimes = JSON.parse(brand.bestTimesJson); } catch { parsedTimes = []; }
+      brandInfo = {
+        handle: brand.instagramHandle,
+        name: brand.name,
+        voice: brand.brandVoice,
+        niche: brand.niche,
+        audience: brand.targetAudience,
+        pillars: parsedPillars,
+        postingGoal: brand.postingGoal,
+        bestTimes: parsedTimes,
+      };
+    }
+
     // ── Load recent jobs ────────────────────────────────────────────────
     const recentJobs = await prisma.contentJob.findMany({
       orderBy: { createdAt: "desc" },
@@ -27,6 +47,7 @@ export async function GET() {
 
     return Response.json({
       engine: engine || null,
+      brand: brandInfo,
       jobs: recentJobs,
       recentJobs,
       stats: {

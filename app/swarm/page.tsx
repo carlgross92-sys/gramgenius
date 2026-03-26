@@ -620,6 +620,7 @@ export default function SwarmStudioPage() {
 
 function ContinuousMode() {
   const [engine, setEngine] = useState<Record<string, unknown> | null>(null);
+  const [brand, setBrand] = useState<Record<string, unknown> | null>(null);
   const [jobs, setJobs] = useState<Array<Record<string, unknown>>>([]);
   const [stats, setStats] = useState<Record<string, number>>({});
   const [theme, setTheme] = useState("");
@@ -637,6 +638,7 @@ function ContinuousMode() {
           setTheme(String(data.engine.theme || ""));
           setPostsPerDay(Number(data.engine.postsPerDay) || 7);
         }
+        if (data.brand) setBrand(data.brand);
         setJobs(data.jobs || []);
         setStats(data.stats || {});
       }
@@ -691,11 +693,27 @@ function ContinuousMode() {
       </div>
       <p className="text-xs text-[#888] mb-3">Runs on server 24/7 — works even when app is closed</p>
 
+      {/* Brand Brain info */}
+      {brand ? (
+        <div className="rounded-lg bg-[#0a0a0a] border border-[#1f1f1f] p-3 mb-1">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-xs text-[#888]">Using Brand Brain:</p>
+            <a href="/brand" className="text-[10px] text-[#f0b429] hover:underline">Edit</a>
+          </div>
+          <p className="text-sm text-white font-medium">@{String(brand.handle)} &middot; {String(brand.name)}</p>
+          <p className="text-xs text-[#888]">Voice: {String(brand.voice)} &middot; {(Array.isArray(brand.pillars) ? brand.pillars as string[] : []).slice(0, 2).join(", ")}{(Array.isArray(brand.pillars) && (brand.pillars as string[]).length > 2) ? ` +${(brand.pillars as string[]).length - 2} more` : ""}</p>
+        </div>
+      ) : (
+        <div className="rounded-lg bg-[#f59e0b]/10 border border-[#f59e0b]/30 p-3 mb-1">
+          <p className="text-xs text-[#f59e0b]">No Brand Brain found — <a href="/brand" className="underline">set up your Brand Brain</a> for best results</p>
+        </div>
+      )}
+
       <div className="flex flex-col gap-3">
         <div>
-          <label className="mb-1 block text-xs text-[#888]">Theme (optional)</label>
+          <label className="mb-1 block text-xs text-[#888]">Override Theme (optional)</label>
           <input value={theme} onChange={(e) => setTheme(e.target.value)}
-            placeholder="Leave blank to use Brand Brain pillars"
+            placeholder="Leave blank to use Brand Brain content pillars"
             className="w-full rounded-lg border border-[#1f1f1f] bg-[#0a0a0a] px-3 py-2 text-sm text-white placeholder:text-[#555]" />
         </div>
         <div>

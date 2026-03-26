@@ -41,13 +41,35 @@ export async function GET(request: Request) {
       pillars = [];
     }
 
-    const themeContext = engine.theme || pillars.join(", ") || brand.niche;
     const count = Math.min(engine.postsPerDay, 10);
 
-    // ── Generate topics via Claude ──────────────────────────────────────
+    // ── Generate topics using Brand Brain ────────────────────────────────
+    const pillarList = pillars.length > 0
+      ? pillars.map((p, i) => `${i + 1}. ${p}`).join("\n")
+      : "1. Funny pet moments\n2. Cute reactions\n3. Wild encounters\n4. Baby animals\n5. Animals doing human things";
+
     const topics = await generateWithClaudeJSON<string[]>(
-      `You are a viral content strategist for @${brand.instagramHandle} in the ${brand.niche} niche. Generate unique, specific, funny animal topics that would go viral on Instagram. Return a JSON array of strings.`,
-      `Generate exactly ${count} unique funny animal content topics.\nTheme: ${themeContext}\nContent pillars: ${pillars.join(", ")}\nEach topic must be specific, visual, hilarious, relatable, and different from each other. Focus on scenarios, reactions, and relatable moments.`,
+      `You are the content strategist for @${brand.instagramHandle} — "${brand.name}".
+
+BRAND PROFILE:
+- Niche: ${brand.niche}
+- Brand Voice: ${brand.brandVoice}
+- Target Audience: ${brand.targetAudience}
+- Content Pillars:
+${pillarList}
+
+${engine.theme ? `THEME OVERRIDE: Focus on "${engine.theme}"` : "Use the content pillars above as your guide."}
+
+RULES:
+- Every topic MUST fit within one of the content pillars above
+- Rotate through ALL pillars — never 2 topics from the same pillar back to back
+- Each topic must describe a specific, visual, funny scene
+- Topics must be ${brand.brandVoice.toLowerCase()} in tone
+- Make them relatable for ${brand.targetAudience}
+- Each must be unique and different from the others
+
+Return ONLY a JSON array of ${count} strings.`,
+      `Generate exactly ${count} unique content topics for @${brand.instagramHandle}. Rotate through these pillars: ${pillars.join(", ")}. Brand voice: ${brand.brandVoice}.`,
       2048
     );
 
@@ -56,10 +78,31 @@ export async function GET(request: Request) {
       return Response.json({ error: "Failed to generate topics" }, { status: 500 });
     }
 
-    // ── Calculate schedule times (LA timezone, UTC-7) ───────────────────
-    const scheduleHours = [7, 9, 11, 13, 15, 17, 19, 21];
+    // ── Calculate schedule times from Brand Brain best times ────────────
+    let bestTimes: Array<{ day: string; hour: string }> = [];
+    try { bestTimes = JSON.parse(brand.bestTimesJson || "[]"); } catch { bestTimes = []; }
+
+    // Get today's day name and preferred hours
     const now = new Date();
-    const tzOffset = -7;
+    const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const todayDay = dayNames[now.getDay()];
+    const tzOffset = -7; // LA timezone
+
+    // Build schedule from brand's best times, or fallback
+    let scheduleHours: number[] = [];
+    if (bestTimes.length > 0) {
+      // Use today's configured time + spread others throughout day
+      const todayTime = bestTimes.find(t => t.day === todayDay);
+      if (todayTime) scheduleHours.push(parseInt(todayTime.hour));
+      // Add other hours spread throughout the day
+      const fallbackHours = [9, 12, 15, 17, 19, 20, 21];
+      for (const h of fallbackHours) {
+        if (!scheduleHours.includes(h)) scheduleHours.push(h);
+        if (scheduleHours.length >= count) break;
+      }
+    } else {
+      scheduleHours = [7, 9, 11, 13, 15, 17, 19, 21];
+    }
 
     const scheduleTimes: Date[] = [];
     for (let i = 0; i < topicList.length; i++) {
