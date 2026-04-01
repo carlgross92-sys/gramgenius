@@ -18,6 +18,8 @@ model BrandProfile {
   autoPostEnabled  Boolean  @default(false)
   timezone         String   @default("America/Los_Angeles")
   bestTimesJson    String   @default("[]")
+  metaAccessToken  String?
+  igBusinessId     String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   posts            Post[]
@@ -183,6 +185,7 @@ model MediaLibrary {
   photographer    String?
   pexelsUrl       String?
   voiceoverUrl    String?
+  brandProfileId  String?
   createdAt       DateTime @default(now())
 }
 

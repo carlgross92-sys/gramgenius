@@ -12,33 +12,50 @@ export async function GET(request: Request) {
       return Response.json({ skipped: true, reason: "Engine not enabled" });
     }
 
-    // ── Load Meta credentials from AppSettings (fallback to env) ────────
-    const settings = await prisma.appSettings.findFirst();
-    const accessToken =
-      settings?.metaAccessToken || process.env.META_ACCESS_TOKEN;
-    const igUserId =
-      settings?.instagramBusinessId || process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID;
-
-    if (!accessToken || !igUserId) {
-      return Response.json(
-        { error: "Meta access token or Instagram ID not configured" },
-        { status: 400 }
-      );
-    }
-
     // ── Find newest completed job ready to publish (must have media) ────
     const job = await prisma.contentJob.findFirst({
       where: {
         status: "COMPLETED",
         instagramPostId: null,
-        videoUrl: { not: null },
+        OR: [{ videoUrl: { not: null } }, { imageUrl: { not: null } }],
         retryCount: { lt: 3 },
       },
-      orderBy: { completedAt: "desc" }, // newest first — old ones may have deleted files
+      orderBy: { completedAt: "desc" },
     });
 
     if (!job) {
       return Response.json({ message: "No jobs ready to publish" });
+    }
+
+    // ── Load credentials: brand-specific first, then global fallback ────
+    let accessToken: string | null = null;
+    let igUserId: string | null = null;
+
+    // Try brand-specific credentials
+    if (job.brandProfileId) {
+      const brand = await prisma.brandProfile.findUnique({
+        where: { id: job.brandProfileId },
+      });
+      if (brand?.metaAccessToken && brand?.igBusinessId) {
+        accessToken = brand.metaAccessToken;
+        igUserId = brand.igBusinessId;
+        console.log(`[Publish] Using brand-specific token for @${brand.instagramHandle}`);
+      }
+    }
+
+    // Fallback to global AppSettings / env
+    if (!accessToken || !igUserId) {
+      const settings = await prisma.appSettings.findFirst();
+      accessToken = accessToken || settings?.metaAccessToken || process.env.META_ACCESS_TOKEN || null;
+      igUserId = igUserId || settings?.instagramBusinessId || process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID || null;
+      console.log("[Publish] Using global token");
+    }
+
+    if (!accessToken || !igUserId) {
+      return Response.json(
+        { error: "No Instagram credentials. Add token in Settings." },
+        { status: 400 }
+      );
     }
 
     // ── Format caption (caption + hashtags, max 2200 chars) ─────────────
