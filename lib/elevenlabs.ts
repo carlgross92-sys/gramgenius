@@ -31,8 +31,8 @@ export async function textToSpeech(
   const vid = voiceId || process.env.ELEVENLABS_VOICE_ID;
   if (!vid) throw new Error("No ElevenLabs voice ID configured");
 
-  // Truncate to 150 chars to conserve credits
-  const truncated = text.length > 150 ? text.substring(0, 147) + "..." : text;
+  // Hard limit 100 chars to minimize credit usage
+  const truncated = text.length > 100 ? text.substring(0, 97) + "..." : text;
 
   const response = await fetch(`${ELEVENLABS_BASE}/text-to-speech/${vid}`, {
     method: "POST",
@@ -43,7 +43,7 @@ export async function textToSpeech(
     },
     body: JSON.stringify({
       text: truncated,
-      model_id: "eleven_turbo_v2",
+      model_id: "eleven_turbo_v2_5",
       voice_settings: {
         stability: 0.5,
         similarity_boost: 0.75,
@@ -109,18 +109,23 @@ export function generateVoiceoverScript(
   caption: string,
   animal: string
 ): string {
-  // Ultra short — max 80 chars to minimize credit usage
+  // Pre-written templates under 60 chars each — deterministic by topic hash
   const templates = [
-    `This ${animal} said I QUIT and honestly same`,
-    `Your ${animal} owns the house you just pay rent`,
-    `Nobody told this ${animal} the rules respect`,
-    `This ${animal} has zero regrets and we love it`,
-    `POV your ${animal} has absolutely no shame`,
-    `This ${animal} really said nope not today mood`,
-    `When your ${animal} is more confident than you`,
-    `Living rent free and thriving goals honestly`,
+    "This animal has zero regrets. Absolutely iconic.",
+    "Nobody told them the rules. We respect it.",
+    "Living rent free and thriving. Goals honestly.",
+    "The confidence is unmatched. Tag a friend.",
+    "POV your pet owns the house. You just pay rent.",
+    "When they know exactly what they are doing.",
+    "This energy. This is the content we needed.",
+    "Caught in the act and not even sorry about it.",
+    "The audacity. The nerve. The absolute legend.",
+    "Main character behavior and we are here for it.",
   ];
-  return templates[Math.floor(Math.random() * templates.length)].substring(0, 80);
+  // Deterministic: same topic always gets same template
+  let hash = 0;
+  for (let i = 0; i < topic.length; i++) hash = ((hash << 5) - hash + topic.charCodeAt(i)) | 0;
+  return templates[Math.abs(hash) % templates.length];
 }
 
 export async function listVoices(): Promise<

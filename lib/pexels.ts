@@ -34,15 +34,18 @@ export async function searchAnimalVideo(
 ): Promise<PexelsVideo> {
   const client = getClient();
 
-  // Queries from most to least specific
+  // Proven search terms that return genuinely funny/cute animal content
   const queries = [
+    `${animal} funny`,
+    `${animal} playing`,
     `funny ${animal}`,
-    `cute ${animal} funny`,
-    `${animal} hilarious`,
-    `${animal} fail`,
-    `funny ${animal} pet`,
-    animal,
-    "funny animals",
+    `${animal} cute`,
+    `${animal} excited`,
+    `cute ${animal} playing`,
+    `${animal} running funny`,
+    `puppy zoomies`,
+    `funny animals`,
+    `cute pets funny`,
   ];
 
   for (const query of queries) {
@@ -62,9 +65,9 @@ export async function searchAnimalVideo(
         continue;
       }
 
-      // Filter for good duration (5-30 seconds)
+      // Filter for Reels sweet spot: 8-20 seconds
       const goodDuration = response.videos.filter(
-        (v) => v.duration >= 5 && v.duration <= 30
+        (v) => v.duration >= 8 && v.duration <= 20
       );
 
       if (goodDuration.length === 0) {
@@ -72,9 +75,9 @@ export async function searchAnimalVideo(
         continue;
       }
 
-      // Pick randomly from top 5 for variety
-      const top5 = goodDuration.slice(0, 5);
-      const selected = top5[Math.floor(Math.random() * top5.length)];
+      // Pick randomly from top 10 for variety
+      const top = goodDuration.slice(0, 10);
+      const selected = top[Math.floor(Math.random() * top.length)];
 
       // Find the best video file: prefer HD, prefer portrait, sort by height desc
       const videoFile = selected.video_files
