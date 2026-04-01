@@ -80,7 +80,9 @@ export async function GET() {
       userName: name,
       tokenExpiresAt: expiresAt?.toISOString() || null,
       daysUntilExpiry,
-      needsRefresh: daysUntilExpiry !== null && daysUntilExpiry <= 10,
+      permanent: expiresAt === null && !!settings.metaAccessToken,
+      tokenType: expiresAt === null ? "page_permanent" : "long_lived_60d",
+      needsRefresh: expiresAt !== null && daysUntilExpiry !== null && daysUntilExpiry <= 10,
     });
   } catch (error) {
     return Response.json({ connected: false, error: "Failed to check" }, { status: 500 });
@@ -111,6 +113,16 @@ export async function POST(request: NextRequest) {
         error: `Invalid token: ${meData.error.message}`,
         valid: false,
       }, { status: 400 });
+    }
+
+    // Try to upgrade to permanent token
+    let tokenResult: { token: string; tokenType: string; expiresAt: Date | null; pageName?: string } | null = null;
+    try {
+      const { savePermanentToken } = await import("@/lib/meta-token");
+      tokenResult = await savePermanentToken(accessToken, instagramBusinessId);
+      console.log(`[Meta] Token upgraded to: ${tokenResult.tokenType}`);
+    } catch (upgradeErr) {
+      console.warn("[Meta] Token upgrade failed, using original:", upgradeErr);
     }
 
     // Try to exchange for a long-lived token (60 days)
@@ -208,14 +220,16 @@ export async function POST(request: NextRequest) {
     return Response.json({
       valid: true,
       saved: true,
-      longLived: longLivedToken !== accessToken,
+      tokenType: tokenResult?.tokenType || (longLivedToken !== accessToken ? "long_lived_60d" : "short_lived"),
+      permanent: tokenResult?.tokenType === "page_permanent",
+      pageName: tokenResult?.pageName || null,
       userName: meData.name,
       instagramBusinessId: igId || null,
       instagramUsername: igUsername || null,
       instagramFollowers: igFollowers,
       facebookPageId: fbPageId || null,
-      tokenExpiresAt: tokenExpiresAt?.toISOString() || null,
-      daysUntilExpiry,
+      tokenExpiresAt: tokenResult?.expiresAt?.toISOString() || tokenExpiresAt?.toISOString() || null,
+      daysUntilExpiry: tokenResult?.tokenType === "page_permanent" ? null : daysUntilExpiry,
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Failed to save settings";
