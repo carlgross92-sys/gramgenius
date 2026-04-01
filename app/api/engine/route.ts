@@ -1,12 +1,43 @@
 import prisma from "@/lib/prisma";
 
-export async function GET() {
-  try {
-    // ── Load engine config ──────────────────────────────────────────────
-    const engine = await prisma.continuousEngine.findFirst();
+async function getActiveBrand(request: Request) {
+  const url = new URL(request.url);
+  const brandId =
+    request.headers.get("x-brand-id") ||
+    url.searchParams.get("brandId") ||
+    null;
 
-    // ── Load brand profile ────────────────────────────────────────────
-    const brand = await prisma.brandProfile.findFirst();
+  if (brandId) {
+    const brand = await prisma.brandProfile.findUnique({ where: { id: brandId } });
+    if (brand) return brand;
+  }
+
+  // Fallback to most recently updated brand
+  return prisma.brandProfile.findFirst({ orderBy: { updatedAt: "desc" } });
+}
+
+export async function GET(request: Request) {
+  try {
+    const brand = await getActiveBrand(request);
+
+    // Find or create engine for this brand
+    let engine = brand
+      ? await prisma.continuousEngine.findFirst({ where: { brandProfileId: brand.id } })
+      : await prisma.continuousEngine.findFirst();
+
+    if (!engine && brand) {
+      engine = await prisma.continuousEngine.create({
+        data: {
+          brandProfileId: brand.id,
+          enabled: false,
+          postsPerDay: 7,
+          reelsPerDay: 5,
+          requireVoiceover: false,
+          minQualityScore: 20,
+        },
+      });
+    }
+
     let brandInfo = null;
     if (brand) {
       let parsedPillars: string[] = [];
@@ -14,6 +45,7 @@ export async function GET() {
       let parsedTimes: unknown[] = [];
       try { parsedTimes = JSON.parse(brand.bestTimesJson); } catch { parsedTimes = []; }
       brandInfo = {
+        id: brand.id,
         handle: brand.instagramHandle,
         name: brand.name,
         voice: brand.brandVoice,
@@ -25,33 +57,26 @@ export async function GET() {
       };
     }
 
-    // ── Load recent jobs ────────────────────────────────────────────────
+    // Jobs for this brand only
+    const brandFilter = brand ? { brandProfileId: brand.id } : {};
     const recentJobs = await prisma.contentJob.findMany({
+      where: brandFilter,
       orderBy: { createdAt: "desc" },
       take: 20,
     });
 
-    // ── Gather stats ────────────────────────────────────────────────────
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     const [queued, processing, completed, failed, postedToInstagram, voiceFailed, postedToday] =
       await Promise.all([
-        prisma.contentJob.count({ where: { status: "QUEUED" } }),
-        prisma.contentJob.count({ where: { status: "PROCESSING" } }),
-        prisma.contentJob.count({ where: { status: "COMPLETED" } }),
-        prisma.contentJob.count({
-          where: { status: { in: ["FAILED", "QUALITY_FAILED"] } },
-        }),
-        prisma.contentJob.count({
-          where: { instagramPostId: { not: null } },
-        }),
-        prisma.contentJob.count({
-          where: { voiceStatus: "FAILED" },
-        }),
-        prisma.contentJob.count({
-          where: { instagramPostId: { not: null }, completedAt: { gte: today } },
-        }),
+        prisma.contentJob.count({ where: { ...brandFilter, status: "QUEUED" } }),
+        prisma.contentJob.count({ where: { ...brandFilter, status: "PROCESSING" } }),
+        prisma.contentJob.count({ where: { ...brandFilter, status: "COMPLETED" } }),
+        prisma.contentJob.count({ where: { ...brandFilter, status: { in: ["FAILED", "QUALITY_FAILED"] } } }),
+        prisma.contentJob.count({ where: { ...brandFilter, instagramPostId: { not: null } } }),
+        prisma.contentJob.count({ where: { ...brandFilter, voiceStatus: "FAILED" } }),
+        prisma.contentJob.count({ where: { ...brandFilter, instagramPostId: { not: null }, completedAt: { gte: today } } }),
       ]);
 
     return Response.json({
@@ -60,14 +85,8 @@ export async function GET() {
       jobs: recentJobs,
       recentJobs,
       stats: {
-        queued,
-        postedToday,
-        dailyTarget: engine?.postsPerDay || 30,
-        voiceFailed,
-        processing,
-        completed,
-        failed,
-        postedToInstagram,
+        queued, processing, completed, failed, postedToInstagram,
+        postedToday, dailyTarget: engine?.postsPerDay || 10, voiceFailed,
       },
     });
   } catch (error) {
@@ -82,25 +101,28 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+    const brand = await getActiveBrand(request);
+    const brandId = brand?.id || body.brandProfileId || null;
 
-    // ── Check if engine config exists ───────────────────────────────────
-    const existing = await prisma.continuousEngine.findFirst();
+    // Find engine for this brand
+    let engine = brandId
+      ? await prisma.continuousEngine.findFirst({ where: { brandProfileId: brandId } })
+      : await prisma.continuousEngine.findFirst();
 
-    // Fields that can be updated
     const data: Record<string, unknown> = {};
     if (body.enabled !== undefined) data.enabled = Boolean(body.enabled);
     if (body.theme !== undefined) data.theme = body.theme;
     if (body.postsPerDay !== undefined) data.postsPerDay = Number(body.postsPerDay);
     if (body.reelsPerDay !== undefined) data.reelsPerDay = Number(body.reelsPerDay);
     if (body.mediaType !== undefined) data.mediaType = String(body.mediaType);
+    if (body.reelStyle !== undefined) data.reelStyle = String(body.reelStyle);
     if (body.requireVoiceover !== undefined) data.requireVoiceover = Boolean(body.requireVoiceover);
     if (body.minQualityScore !== undefined) data.minQualityScore = Number(body.minQualityScore);
 
-    let engine;
-    if (existing) {
+    if (engine) {
       engine = await prisma.continuousEngine.update({
-        where: { id: existing.id },
-        data,
+        where: { id: engine.id },
+        data: { ...data, brandProfileId: brandId },
       });
     } else {
       engine = await prisma.continuousEngine.create({
@@ -109,8 +131,9 @@ export async function POST(request: Request) {
           postsPerDay: 7,
           reelsPerDay: 5,
           mediaType: "video",
-          requireVoiceover: true,
-          minQualityScore: 70,
+          requireVoiceover: false,
+          minQualityScore: 20,
+          brandProfileId: brandId,
           ...data,
         },
       });

@@ -642,7 +642,8 @@ function ContinuousMode() {
 
   const loadStatus = async () => {
     try {
-      const res = await fetch("/api/engine");
+      const brandId = typeof window !== "undefined" ? localStorage.getItem("gramgenius-active-brand") || "" : "";
+      const res = await fetch(`/api/engine${brandId ? `?brandId=${brandId}` : ""}`);
       if (res.ok) {
         const data = await res.json();
         if (data.engine) {
@@ -667,14 +668,15 @@ function ContinuousMode() {
     setSaving(true);
     const newEnabled = !engine?.enabled;
     try {
+      const brandId = typeof window !== "undefined" ? localStorage.getItem("gramgenius-active-brand") || "" : "";
       await fetch("/api/engine", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-brand-id": brandId },
         body: JSON.stringify({ enabled: newEnabled, theme: theme || null, postsPerDay }),
       });
       if (newEnabled) {
         setStarting(true);
-        await fetch("/api/cron/generate-content");
+        await fetch("/api/cron/generate-content", { headers: { "x-brand-id": brandId } });
         setStarting(false);
       }
       await loadStatus();

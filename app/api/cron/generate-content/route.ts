@@ -13,9 +13,19 @@ export async function GET(request: Request) {
       }
     }
 
-    // ── Load engine config ──────────────────────────────────────────────
-    const engine = await prisma.continuousEngine.findFirst();
-    if (!engine || !engine.enabled) {
+    // ── Load engine config — support brand-specific or all enabled ──────
+    const headerBrandId = request.headers.get("x-brand-id");
+    const engines = headerBrandId
+      ? await prisma.continuousEngine.findMany({ where: { brandProfileId: headerBrandId, enabled: true } })
+      : await prisma.continuousEngine.findMany({ where: { enabled: true } });
+
+    if (engines.length === 0) {
+      return Response.json({ skipped: true, reason: "No enabled engines" });
+    }
+
+    // Process first enabled engine (multi-engine loop can be added later)
+    const engine = engines[0];
+    if (!engine) {
       return Response.json({ skipped: true, reason: "Engine not enabled" });
     }
 
@@ -47,8 +57,10 @@ export async function GET(request: Request) {
       }
     } catch { /* non-critical */ }
 
-    // ── Load brand profile ──────────────────────────────────────────────
-    const brand = await prisma.brandProfile.findFirst();
+    // ── Load brand profile for THIS engine ──────────────────────────────
+    const brand = engine.brandProfileId
+      ? await prisma.brandProfile.findUnique({ where: { id: engine.brandProfileId } })
+      : await prisma.brandProfile.findFirst({ orderBy: { updatedAt: "desc" } });
     if (!brand) {
       return Response.json({ error: "No brand profile found" }, { status: 400 });
     }
