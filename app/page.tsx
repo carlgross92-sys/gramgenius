@@ -3,502 +3,351 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  FileText,
-  Clock,
+  Bot,
+  Plus,
+  ExternalLink,
   CheckCircle,
-  Edit3,
-  PenSquare,
-  Film,
-  TrendingUp,
-  Hash,
+  Clock,
   Loader2,
-  Heart,
-  Zap,
-  Play,
-  Calendar as CalendarIcon,
+  Film,
 } from "lucide-react";
-import { Header } from "@/components/layout/Header";
-import { StatsCard } from "@/components/dashboard/StatsCard";
-import { RecentPosts } from "@/components/dashboard/RecentPosts";
-import { UpcomingSchedule } from "@/components/dashboard/UpcomingSchedule";
-import { ContentPillarChart } from "@/components/dashboard/ContentPillarChart";
-import { GoldButton } from "@/components/ui/GoldButton";
 import { DarkCard } from "@/components/ui/DarkCard";
+import { GoldButton } from "@/components/ui/GoldButton";
 
-interface PostStats {
-  total: number;
-  scheduled: number;
-  publishedThisWeek: number;
-  drafts: number;
+interface BrandWithEngine {
+  id: string;
+  name: string;
+  handle: string;
+  niche: string;
+  postCount: number;
+  engineEnabled: boolean;
+  todayPosted: number;
+  queued: number;
+  jobs: Array<Record<string, unknown>>;
+}
+
+const BRAND_COLORS = ["#f0b429", "#8b5cf6", "#3b82f6", "#22c55e", "#ec4899"];
+
+function timeAgo(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diff = Math.floor((now - then) / 1000);
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
+function statusText(status: string): string {
+  switch (status) {
+    case "COMPLETED":
+      return "Posted";
+    case "PROCESSING":
+      return "Processing";
+    case "QUEUED":
+      return "Queued";
+    case "FAILED":
+    case "QUALITY_FAILED":
+      return "Failed";
+    default:
+      return status;
+  }
+}
+
+function statusColor(status: string): string {
+  switch (status) {
+    case "COMPLETED":
+      return "text-[#22c55e]";
+    case "PROCESSING":
+      return "text-[#f0b429]";
+    case "QUEUED":
+      return "text-[#3b82f6]";
+    case "FAILED":
+    case "QUALITY_FAILED":
+      return "text-[#ef4444]";
+    default:
+      return "text-[#888]";
+  }
 }
 
 export default function DashboardPage() {
-  const [stats, setStats] = useState<PostStats>({
-    total: 0,
-    scheduled: 0,
-    publishedThisWeek: 0,
-    drafts: 0,
-  });
-  const [brandActive, setBrandActive] = useState(false);
-  const [healthScore, setHealthScore] = useState(0);
-  const [recentPosts, setRecentPosts] = useState<Array<{id:string;caption:string;postType:string;status:string;scheduledAt?:string|null}>>([]);
+  const [brands, setBrands] = useState<BrandWithEngine[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  const [autopilot, setAutopilot] = useState({
-    enabled: false,
-    lastRun: null as string | null,
-    nextRun: null as string | null,
-    publishedToday: 0,
-    scheduledToday: 0,
-    reelsThisWeek: 0,
-    nextPostTime: null as string | null,
-    nextPostTopic: null as string | null,
-  });
-  const [engineConfig, setEngineConfig] = useState({
-    feedPostsPerDay: 7,
-    reelsPerDay: 3,
-    maxPostsPerDay: 10,
-  });
-  const [runningEngine, setRunningEngine] = useState(false);
-
-  const loadAutopilotStatus = async () => {
+  const fetchAllData = async () => {
     try {
-      const [statusRes, configRes] = await Promise.allSettled([
-        fetch("/api/auto/status"),
-        fetch("/api/auto/config"),
-      ]);
+      const brandsRes = await fetch("/api/brands");
+      if (!brandsRes.ok) return;
+      const brandsData = await brandsRes.json();
+      const brandList = brandsData.brands || [];
 
-      if (statusRes.status === "fulfilled" && statusRes.value.ok) {
-        const data = await statusRes.value.json();
-        setAutopilot((prev) => ({
-          ...prev,
-          enabled: data.enabled ?? prev.enabled,
-          lastRun: data.lastRun ?? prev.lastRun,
-          nextRun: data.nextRun ?? prev.nextRun,
-          publishedToday: data.publishedToday ?? prev.publishedToday,
-          scheduledToday: data.scheduledToday ?? prev.scheduledToday,
-          reelsThisWeek: data.reelsThisWeek ?? prev.reelsThisWeek,
-          nextPostTime: data.nextPostTime ?? prev.nextPostTime,
-          nextPostTopic: data.nextPostTopic ?? prev.nextPostTopic,
-        }));
-      }
+      // Fetch engine status for each brand in parallel
+      const engineResults = await Promise.all(
+        brandList.map(async (brand: { id: string; name: string; handle: string; niche: string; postCount: number; engineEnabled: boolean }) => {
+          try {
+            const res = await fetch(`/api/engine?brandId=${brand.id}`);
+            if (!res.ok) return { ...brand, todayPosted: 0, queued: 0, jobs: [] };
+            const data = await res.json();
+            return {
+              id: brand.id,
+              name: brand.name,
+              handle: brand.handle,
+              niche: brand.niche,
+              postCount: brand.postCount,
+              engineEnabled: data.engine?.enabled ?? brand.engineEnabled,
+              todayPosted: data.stats?.postedToday ?? 0,
+              queued: data.stats?.queued ?? 0,
+              jobs: data.jobs || [],
+            };
+          } catch {
+            return {
+              id: brand.id,
+              name: brand.name,
+              handle: brand.handle,
+              niche: brand.niche,
+              postCount: brand.postCount,
+              engineEnabled: brand.engineEnabled,
+              todayPosted: 0,
+              queued: 0,
+              jobs: [],
+            };
+          }
+        })
+      );
 
-      if (configRes.status === "fulfilled" && configRes.value.ok) {
-        const data = await configRes.value.json();
-        setEngineConfig((prev) => ({
-          feedPostsPerDay: data.feedPostsPerDay ?? prev.feedPostsPerDay,
-          reelsPerDay: data.reelsPerDay ?? prev.reelsPerDay,
-          maxPostsPerDay: data.maxPostsPerDay ?? prev.maxPostsPerDay,
-        }));
-      }
+      setBrands(engineResults);
     } catch {
-      // Silently fail — autopilot status is non-critical
+      // Silent fail
+    } finally {
+      setLoading(false);
     }
   };
 
-  const toggleAutopilot = async () => {
+  useEffect(() => {
+    fetchAllData();
+    const interval = setInterval(fetchAllData, 60000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const toggleEngine = async (brandId: string, currentEnabled: boolean) => {
     try {
-      const res = await fetch("/api/auto/config", {
+      const res = await fetch(`/api/engine?brandId=${brandId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled: !autopilot.enabled }),
+        body: JSON.stringify({ enabled: !currentEnabled, brandProfileId: brandId }),
       });
       if (res.ok) {
-        setAutopilot((prev) => ({ ...prev, enabled: !prev.enabled }));
+        setBrands((prev) =>
+          prev.map((b) =>
+            b.id === brandId ? { ...b, engineEnabled: !currentEnabled } : b
+          )
+        );
       }
     } catch {
-      // Silently fail
+      // Silent fail
     }
   };
 
-  const runEngineNow = async () => {
-    setRunningEngine(true);
-    try {
-      await fetch("/api/auto/daily-engine", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      await loadAutopilotStatus();
-    } catch {
-      // Silently fail
-    } finally {
-      setRunningEngine(false);
-    }
-  };
+  // Combine all jobs from all brands, sort by createdAt descending, take 10
+  type JobWithBrand = Record<string, unknown> & { brandName: string; brandHandle: string };
+  const allJobs: JobWithBrand[] = brands
+    .flatMap((b) =>
+      b.jobs.map((j): JobWithBrand => ({ ...j, brandName: b.name, brandHandle: b.handle }))
+    )
+    .sort((a, b) => {
+      const aDate = new Date(a.createdAt as string).getTime();
+      const bDate = new Date(b.createdAt as string).getTime();
+      return bDate - aDate;
+    })
+    .slice(0, 10);
 
-  const updateConfig = async (newConfig: Partial<typeof engineConfig>) => {
-    const merged = { ...engineConfig, ...newConfig };
-    setEngineConfig(merged);
-    try {
-      await fetch("/api/auto/config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(merged),
-      });
-    } catch {
-      // Silently fail
-    }
-  };
-
-  useEffect(() => {
-    loadAutopilotStatus();
-    const interval = setInterval(loadAutopilotStatus, 60000);
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        setLoading(true);
-
-        const [postsRes, brandRes] = await Promise.allSettled([
-          fetch("/api/posts"),
-          fetch("/api/brand"),
-        ]);
-
-        if (postsRes.status === "fulfilled" && postsRes.value.ok) {
-          const postsData = await postsRes.value.json();
-          const posts = postsData.posts || postsData.data || postsData || [];
-          const now = new Date();
-          const weekStart = new Date(now);
-          weekStart.setDate(now.getDate() - now.getDay());
-          weekStart.setHours(0, 0, 0, 0);
-
-          setStats({
-            total: posts.length,
-            scheduled: posts.filter(
-              (p: { status: string }) => p.status === "SCHEDULED"
-            ).length,
-            publishedThisWeek: posts.filter(
-              (p: { status: string; publishedAt?: string }) =>
-                p.status === "PUBLISHED" &&
-                p.publishedAt &&
-                new Date(p.publishedAt) >= weekStart
-            ).length,
-            drafts: posts.filter(
-              (p: { status: string }) => p.status === "DRAFT"
-            ).length,
-          });
-
-          // Calculate health score based on post activity
-          const score = Math.min(
-            100,
-            Math.round(
-              (posts.length * 5 +
-                posts.filter(
-                  (p: { status: string }) => p.status === "PUBLISHED"
-                ).length *
-                  10) /
-                2
-            )
-          );
-          setHealthScore(score || 42);
-          setRecentPosts(posts.slice(0, 10));
-        }
-
-        if (brandRes.status === "fulfilled" && brandRes.value.ok) {
-          const brandData = await brandRes.value.json();
-          setBrandActive(!!brandData?.brandName || !!brandData?.handle);
-        }
-      } catch {
-        setError("Failed to load dashboard data");
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchData();
-  }, []);
-
-  const quickActions = [
-    { label: "Create Post", href: "/create", icon: PenSquare },
-    { label: "Make a Reel", href: "/reels", icon: Film },
-    { label: "Research Trends", href: "/ideas", icon: TrendingUp },
-    { label: "Find Hashtags", href: "/hashtags", icon: Hash },
-  ];
+  // Quick stats
+  const totalPostsToday = brands.reduce((sum, b) => sum + b.todayPosted, 0);
+  const totalPostsEver = brands.reduce((sum, b) => sum + b.postCount, 0);
+  const brandsActive = brands.filter((b) => b.engineEnabled).length;
+  const videosInQueue = brands.reduce((sum, b) => sum + b.queued, 0);
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center bg-[#0a0a0a]">
         <Loader2 className="h-8 w-8 animate-spin text-[#f0b429]" />
       </div>
     );
   }
 
-  if (error) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <DarkCard className="text-center">
-          <p className="text-[#ef4444]">{error}</p>
-          <GoldButton className="mt-4" onClick={() => window.location.reload()}>
-            Retry
-          </GoldButton>
-        </DarkCard>
-      </div>
-    );
-  }
-
   return (
-    <div className="flex flex-col">
-      <Header title="Dashboard" brandActive={brandActive} />
-
+    <div className="flex min-h-screen flex-col bg-[#0a0a0a]">
       <div className="flex flex-col gap-6 p-6">
-        {/* Hero header */}
+        {/* Header */}
         <div>
-          <h2 className="text-3xl font-bold text-[#f0b429]">GramGenius</h2>
-          <p className="text-[#888888]">Your Instagram AI Growth Engine</p>
+          <h1 className="text-3xl font-bold text-[#f0b429]">GramGenius</h1>
+          <p className="text-[#888]">Multi-Brand Video Machine</p>
         </div>
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatsCard icon={FileText} label="Total Posts" value={stats.total} />
-          <StatsCard icon={Clock} label="Scheduled" value={stats.scheduled} />
-          <StatsCard
-            icon={CheckCircle}
-            label="Published This Week"
-            value={stats.publishedThisWeek}
-          />
-          <StatsCard icon={Edit3} label="Drafts" value={stats.drafts} />
-        </div>
+        {/* Brand Cards Section */}
+        <div>
+          <h2 className="mb-3 text-sm font-medium uppercase tracking-wider text-[#888]">
+            Your Brands
+          </h2>
+          <div className="flex gap-4 overflow-x-auto pb-2 md:grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 md:overflow-visible">
+            {brands.map((brand, idx) => {
+              const color = BRAND_COLORS[idx % BRAND_COLORS.length];
+              return (
+                <DarkCard
+                  key={brand.id}
+                  className="min-w-[280px] flex-shrink-0 flex flex-col gap-3 md:min-w-0"
+                  style={{ borderLeft: `3px solid ${color}` }}
+                >
+                  {/* Brand name + handle */}
+                  <div>
+                    <h3 className="text-base font-semibold text-white">
+                      {brand.name}
+                    </h3>
+                    <span className="text-sm text-[#888]">@{brand.handle}</span>
+                  </div>
 
-        {/* Quick Actions */}
-        <div className="flex flex-wrap gap-3">
-          {quickActions.map((action) => (
-            <Link key={action.href} href={action.href}>
-              <GoldButton>
-                <action.icon className="h-4 w-4" />
-                {action.label}
-              </GoldButton>
-            </Link>
-          ))}
-        </div>
+                  {/* Engine status */}
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`inline-block h-2 w-2 rounded-full ${
+                        brand.engineEnabled ? "bg-[#22c55e]" : "bg-[#ef4444]"
+                      }`}
+                    />
+                    <span
+                      className={`text-xs font-bold uppercase tracking-wide ${
+                        brand.engineEnabled ? "text-[#22c55e]" : "text-[#ef4444]"
+                      }`}
+                    >
+                      {brand.engineEnabled ? "RUNNING" : "STOPPED"}
+                    </span>
+                  </div>
 
-        {/* Autopilot Control Panel */}
-        <DarkCard glow className="flex flex-col gap-5">
-          {/* Header row */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              {autopilot.enabled && (
-                <span className="relative flex h-3 w-3">
-                  <span className="absolute inline-flex h-full w-full animate-pulse rounded-full bg-[#22c55e] opacity-75" />
-                  <span className="relative inline-flex h-3 w-3 rounded-full bg-[#22c55e]" />
+                  {/* Post counts */}
+                  <div className="flex items-center gap-4 text-sm">
+                    <span className="text-[#888]">
+                      Today:{" "}
+                      <span className="font-medium text-white">
+                        {brand.todayPosted} posts
+                      </span>
+                    </span>
+                    <span className="text-[#888]">
+                      Total:{" "}
+                      <span className="font-medium text-white">
+                        {brand.postCount} posts
+                      </span>
+                    </span>
+                  </div>
+
+                  {/* Action buttons */}
+                  <div className="flex items-center gap-2 pt-1">
+                    <Link href="/autopilot" className="flex-1">
+                      <GoldButton variant="secondary" className="w-full text-xs">
+                        <Bot className="h-3.5 w-3.5" />
+                        Manage
+                      </GoldButton>
+                    </Link>
+                    <GoldButton
+                      variant={brand.engineEnabled ? "danger" : "primary"}
+                      className="flex-1 text-xs"
+                      onClick={() => toggleEngine(brand.id, brand.engineEnabled)}
+                    >
+                      {brand.engineEnabled ? "Stop" : "Start"}
+                    </GoldButton>
+                  </div>
+                </DarkCard>
+              );
+            })}
+
+            {/* Add New Brand card */}
+            <Link href="/brands" className="min-w-[280px] flex-shrink-0 md:min-w-0">
+              <DarkCard className="flex h-full min-h-[200px] flex-col items-center justify-center gap-3 border-dashed border-[#333] transition-colors hover:border-[#f0b429]/50">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full border border-[#333]">
+                  <Plus className="h-6 w-6 text-[#888]" />
+                </div>
+                <span className="text-sm font-medium text-[#888]">
+                  Add New Brand
                 </span>
-              )}
-              <Zap className="h-5 w-5 text-[#f0b429]" />
-              <h3 className="text-lg font-bold text-white tracking-wide">AUTOPILOT</h3>
-            </div>
-            <button
-              onClick={toggleAutopilot}
-              className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ${
-                autopilot.enabled ? "bg-[#f0b429]" : "bg-[#333]"
-              }`}
-              role="switch"
-              aria-checked={autopilot.enabled}
-            >
-              <span
-                className={`inline-block h-5 w-5 rounded-full bg-white shadow-md transition-transform duration-200 ${
-                  autopilot.enabled ? "translate-x-6" : "translate-x-1"
-                }`}
-              />
-            </button>
-          </div>
-
-          {/* Status indicators 2x2 grid */}
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <div className="flex items-center gap-2">
-              <CalendarIcon className="h-4 w-4 text-[#f0b429]" />
-              <div>
-                <p className="text-xs text-[#888]">Next Post</p>
-                <p className="text-sm font-medium text-white">
-                  {autopilot.nextPostTime
-                    ? new Date(autopilot.nextPostTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                    : "—"}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle className="h-4 w-4 text-[#f0b429]" />
-              <div>
-                <p className="text-xs text-[#888]">Published Today</p>
-                <p className="text-sm font-medium text-white">{autopilot.publishedToday}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Film className="h-4 w-4 text-[#f0b429]" />
-              <div>
-                <p className="text-xs text-[#888]">Reels This Week</p>
-                <p className="text-sm font-medium text-white">{autopilot.reelsThisWeek}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-[#f0b429]" />
-              <div>
-                <p className="text-xs text-[#888]">Engine Schedule</p>
-                <p className="text-sm font-medium text-white">
-                  {autopilot.nextRun
-                    ? new Date(autopilot.nextRun).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                    : "Idle"}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Action buttons row */}
-          <div className="flex flex-wrap gap-3">
-            <GoldButton onClick={runEngineNow} disabled={runningEngine}>
-              {runningEngine ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Play className="h-4 w-4" />
-              )}
-              {runningEngine ? "Running..." : "Run Engine Now"}
-            </GoldButton>
-            <Link href="/calendar">
-              <GoldButton variant="secondary">
-                <CalendarIcon className="h-4 w-4" />
-                View Schedule
-              </GoldButton>
+              </DarkCard>
             </Link>
           </div>
+        </div>
 
-          {/* Sliders row */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-xs text-[#888]">Feed posts / day</label>
-                <span className="text-sm font-medium text-white">{engineConfig.feedPostsPerDay}</span>
-              </div>
-              <input
-                type="range"
-                min={1}
-                max={30}
-                value={engineConfig.feedPostsPerDay}
-                onChange={(e) =>
-                  setEngineConfig((prev) => ({ ...prev, feedPostsPerDay: Number(e.target.value) }))
-                }
-                onMouseUp={() => updateConfig({ feedPostsPerDay: engineConfig.feedPostsPerDay })}
-                onTouchEnd={() => updateConfig({ feedPostsPerDay: engineConfig.feedPostsPerDay })}
-                className="w-full accent-[#f0b429]"
-              />
+        {/* Activity Feed */}
+        <DarkCard>
+          <h2 className="mb-4 text-sm font-medium uppercase tracking-wider text-[#888]">
+            Today&apos;s Activity
+          </h2>
+          {allJobs.length === 0 ? (
+            <p className="py-8 text-center text-sm text-[#555]">
+              No activity yet. Start an engine to begin generating content.
+            </p>
+          ) : (
+            <div className="flex flex-col divide-y divide-[#1f1f1f]">
+              {allJobs.map((job, idx) => (
+                <div
+                  key={(job.id as string) || idx}
+                  className="flex items-center gap-3 py-3 first:pt-0 last:pb-0"
+                >
+                  <Film className="h-4 w-4 shrink-0 text-[#f0b429]" />
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-[#f0b429]">
+                        {job.brandName as string}
+                      </span>
+                      <span className="truncate text-sm text-white">
+                        {((job.topic as string) || (job.theme as string) || "Untitled").slice(0, 60)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs ${statusColor(job.status as string)}`}>
+                        {statusText(job.status as string)}
+                      </span>
+                      {job.createdAt ? (
+                        <span className="text-xs text-[#555]">
+                          {timeAgo(job.createdAt as string)}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                  {job.instagramPostId ? (
+                    <a
+                      href={`https://www.instagram.com/p/${job.instagramPostId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="shrink-0 text-[#888] transition-colors hover:text-[#f0b429]"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </a>
+                  ) : null}
+                </div>
+              ))}
             </div>
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-xs text-[#888]">Reels / day</label>
-                <span className="text-sm font-medium text-white">{engineConfig.reelsPerDay}</span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={30}
-                value={engineConfig.reelsPerDay}
-                onChange={(e) =>
-                  setEngineConfig((prev) => ({ ...prev, reelsPerDay: Number(e.target.value) }))
-                }
-                onMouseUp={() => updateConfig({ reelsPerDay: engineConfig.reelsPerDay })}
-                onTouchEnd={() => updateConfig({ reelsPerDay: engineConfig.reelsPerDay })}
-                className="w-full accent-[#f0b429]"
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-xs text-[#888]">Max / day</label>
-                <span className="text-sm font-medium text-white">{engineConfig.maxPostsPerDay}</span>
-              </div>
-              <input
-                type="range"
-                min={1}
-                max={30}
-                value={engineConfig.maxPostsPerDay}
-                onChange={(e) =>
-                  setEngineConfig((prev) => ({ ...prev, maxPostsPerDay: Number(e.target.value) }))
-                }
-                onMouseUp={() => updateConfig({ maxPostsPerDay: engineConfig.maxPostsPerDay })}
-                onTouchEnd={() => updateConfig({ maxPostsPerDay: engineConfig.maxPostsPerDay })}
-                className="w-full accent-[#f0b429]"
-              />
-            </div>
-          </div>
+          )}
         </DarkCard>
 
-        {/* Content Grid */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          {/* Recent Posts - spans 2 cols */}
-          <div className="lg:col-span-2">
-            <RecentPosts posts={recentPosts.map(p => ({
-              id: p.id,
-              caption: p.caption,
-              type: (p.postType || "FEED") as "FEED"|"REEL"|"CAROUSEL"|"STORY",
-              status: p.status as "DRAFT"|"SCHEDULED"|"PUBLISHED"|"FAILED",
-              scheduledAt: p.scheduledAt,
-            }))} />
-          </div>
-
-          {/* Account Health Score */}
-          <DarkCard glow className="flex flex-col items-center gap-4">
-            <h3 className="text-sm font-medium text-[#888888]">
-              Account Health Score
-            </h3>
-            <div className="relative flex h-36 w-36 items-center justify-center">
-              <svg className="h-36 w-36 -rotate-90" viewBox="0 0 144 144">
-                <circle
-                  cx="72"
-                  cy="72"
-                  r="60"
-                  fill="none"
-                  stroke="#1f1f1f"
-                  strokeWidth="10"
-                />
-                <circle
-                  cx="72"
-                  cy="72"
-                  r="60"
-                  fill="none"
-                  stroke={
-                    healthScore >= 70
-                      ? "#22c55e"
-                      : healthScore >= 40
-                        ? "#f0b429"
-                        : "#ef4444"
-                  }
-                  strokeWidth="10"
-                  strokeLinecap="round"
-                  strokeDasharray={`${(healthScore / 100) * 377} 377`}
-                />
-              </svg>
-              <div className="absolute flex flex-col items-center">
-                <span className="text-3xl font-bold text-white">
-                  {healthScore}
-                </span>
-                <span className="text-xs text-[#888888]">/ 100</span>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Heart className="h-4 w-4 text-[#f0b429]" />
-              <span className="text-sm text-[#888888]">
-                {healthScore >= 70
-                  ? "Healthy"
-                  : healthScore >= 40
-                    ? "Needs Attention"
-                    : "Critical"}
-              </span>
-            </div>
+        {/* Quick Stats Bar */}
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          <DarkCard className="flex flex-col items-center gap-1 py-4">
+            <CheckCircle className="h-5 w-5 text-[#22c55e]" />
+            <span className="text-2xl font-bold text-white">{totalPostsToday}</span>
+            <span className="text-xs text-[#888]">Posts Today</span>
           </DarkCard>
-        </div>
-
-        {/* Upcoming Schedule & Content Pillar Chart */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <UpcomingSchedule posts={recentPosts.filter(p => p.scheduledAt).map(p => ({
-            id: p.id,
-            type: (p.postType || "FEED") as "FEED"|"REEL"|"CAROUSEL"|"STORY",
-            status: p.status as "DRAFT"|"SCHEDULED"|"PUBLISHED"|"FAILED",
-            scheduledAt: p.scheduledAt || new Date().toISOString(),
-          }))} />
-          <ContentPillarChart posts={recentPosts.map(p => ({
-            id: p.id,
-            type: (p.postType || "FEED") as "FEED"|"REEL"|"CAROUSEL"|"STORY",
-          }))} />
+          <DarkCard className="flex flex-col items-center gap-1 py-4">
+            <Film className="h-5 w-5 text-[#f0b429]" />
+            <span className="text-2xl font-bold text-white">{totalPostsEver}</span>
+            <span className="text-xs text-[#888]">Total Posts</span>
+          </DarkCard>
+          <DarkCard className="flex flex-col items-center gap-1 py-4">
+            <Bot className="h-5 w-5 text-[#8b5cf6]" />
+            <span className="text-2xl font-bold text-white">{brandsActive}</span>
+            <span className="text-xs text-[#888]">Brands Active</span>
+          </DarkCard>
+          <DarkCard className="flex flex-col items-center gap-1 py-4">
+            <Clock className="h-5 w-5 text-[#3b82f6]" />
+            <span className="text-2xl font-bold text-white">{videosInQueue}</span>
+            <span className="text-xs text-[#888]">In Queue</span>
+          </DarkCard>
         </div>
       </div>
     </div>

@@ -5,20 +5,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
-  Brain,
-  TrendingUp,
-  PenSquare,
-  Zap,
-  Film,
-  Calendar,
-  BarChart3,
-  Hash,
-  Users,
-  MessageCircle,
-  Handshake,
-  Settings,
-  ImageIcon,
+  Bot,
   Layers,
+  Brain,
+  Calendar,
+  ImageIcon,
+  Settings,
   Menu,
   X,
 } from "lucide-react";
@@ -27,19 +19,11 @@ import { BrandSwitcher } from "@/components/layout/BrandSwitcher";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, href: "/" },
+  { label: "Autopilot", icon: Bot, href: "/autopilot" },
+  { label: "My Brands", icon: Layers, href: "/brands" },
   { label: "Brand Brain", icon: Brain, href: "/brand" },
-  { label: "Trend Research", icon: TrendingUp, href: "/ideas" },
-  { label: "Create Post", icon: PenSquare, href: "/create" },
-  { label: "Swarm Studio", icon: Zap, href: "/swarm", badge: "NEW" },
-  { label: "Reel Studio", icon: Film, href: "/reels" },
   { label: "Calendar", icon: Calendar, href: "/calendar" },
   { label: "Media Library", icon: ImageIcon, href: "/media" },
-  { label: "Analytics", icon: BarChart3, href: "/analytics" },
-  { label: "Hashtags", icon: Hash, href: "/hashtags" },
-  { label: "Competitors", icon: Users, href: "/competitors" },
-  { label: "Engagement", icon: MessageCircle, href: "/engage" },
-  { label: "Collabs", icon: Handshake, href: "/collabs" },
-  { label: "My Brands", icon: Layers, href: "/brands" },
   { label: "Settings", icon: Settings, href: "/settings" },
 ];
 
@@ -111,15 +95,17 @@ function Sidebar() {
                 )}
                 <Icon className="h-5 w-5 shrink-0" />
                 <span>{item.label}</span>
-                {"badge" in item && item.badge && (
-                  <span className="ml-auto rounded-full bg-[#f0b429] px-1.5 py-0.5 text-[10px] font-bold leading-none text-black">
-                    {item.badge}
-                  </span>
-                )}
               </Link>
             );
           })}
         </nav>
+
+        {/* Engine Status */}
+        <div className="mt-auto border-t border-[#1f1f1f] px-4 py-3">
+          <p className="text-[10px] uppercase tracking-wider text-[#888]">Engine Status</p>
+          <p className="text-sm font-medium text-[#22c55e]">● Running</p>
+          <p className="text-xs text-[#888]">Click Autopilot for details</p>
+        </div>
       </aside>
     </>
   );
