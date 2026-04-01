@@ -67,7 +67,14 @@ export async function GET(request: Request) {
       }
 
       let pillars: string[] = [];
-      try { pillars = JSON.parse(brand.contentPillars); } catch { pillars = []; }
+      try {
+        const raw = brand.contentPillars;
+        if (Array.isArray(raw)) {
+          pillars = raw as string[];
+        } else if (typeof raw === "string") {
+          pillars = JSON.parse(raw);
+        }
+      } catch { pillars = []; }
 
       // ── Count existing jobs for THIS BRAND only ─────────────────────
       const existingToday = await prisma.contentJob.count({
@@ -86,6 +93,7 @@ export async function GET(request: Request) {
         continue;
       }
       console.log(`[Generate Content] ${brand.name}: Need ${count} more jobs (${existingToday} exist today, target ${engine.postsPerDay})`);
+      console.log(`[Generate Content] ${brand.name}: Pillars parsed: ${pillars.length} items: ${pillars.join(", ").slice(0, 100)}`);
 
       // ── Detect brand type ────────────────────────────────────────────
       const pillarsText = pillars.join(" ").toLowerCase();
@@ -115,6 +123,8 @@ export async function GET(request: Request) {
         nicheText.includes("pet") ||
         nicheText.includes("entertain") ||
         brand.instagramHandle === "chewy_sacramento";
+
+      console.log(`[Generate Content] ${brand.name}: isConservative=${isConservative}, isFunnyAnimals=${isFunnyAnimals}`);
 
       // ── Build brand-specific prompt ──────────────────────────────────
       let brandRules: string;
@@ -208,7 +218,11 @@ Return ONLY a JSON array of ${count} strings.`,
 
       // ── Calculate schedule times ────────────────────────────────────
       let bestTimes: Array<{ day: string; hour: string }> = [];
-      try { bestTimes = JSON.parse(brand.bestTimesJson || "[]"); } catch { bestTimes = []; }
+      try {
+        const rawTimes = brand.bestTimesJson;
+        if (Array.isArray(rawTimes)) bestTimes = rawTimes as Array<{ day: string; hour: string }>;
+        else if (typeof rawTimes === "string") bestTimes = JSON.parse(rawTimes);
+      } catch { bestTimes = []; }
 
       const now = new Date();
       const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
