@@ -224,6 +224,14 @@ export async function GET(request: Request) {
         where: { status: "QUEUED", retryCount: { lt: 3 } },
       });
 
+      // ── Always try to publish completed jobs after processing ──────
+      try {
+        const publishUrl = new URL("/api/cron/publish-scheduled", request.url);
+        fetch(publishUrl.toString(), {
+          headers: { authorization: request.headers.get("authorization") || "" },
+        }).catch(() => {});
+      } catch {}
+
       if (moreQueued > 0) {
         await new Promise((r) => setTimeout(r, 3000));
         try {
@@ -233,24 +241,6 @@ export async function GET(request: Request) {
             headers: { authorization: request.headers.get("authorization") || "" },
           }).catch(() => {});
         } catch {}
-      } else {
-        // No queued jobs — check if we need to backfill to reach daily target
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const postedToday = await prisma.contentJob.count({
-          where: { status: "COMPLETED", completedAt: { gte: today } },
-        });
-        const dailyTarget = engine?.postsPerDay || 30;
-
-        if (postedToday < dailyTarget) {
-          console.log(`[Process Queue] Backfill needed: ${postedToday}/${dailyTarget} — triggering content generation`);
-          try {
-            const genUrl = new URL("/api/cron/generate-content", request.url);
-            fetch(genUrl.toString(), {
-              headers: { authorization: request.headers.get("authorization") || "" },
-            }).catch(() => {});
-          } catch {}
-        }
       }
     }
 

@@ -185,12 +185,33 @@ export async function GET(request: Request) {
         });
       }
 
+      // ── Chain: publish next completed job if any ───────────────────
+      const moreCompleted = await prisma.contentJob.count({
+        where: {
+          status: "COMPLETED",
+          instagramPostId: null,
+          OR: [{ videoUrl: { not: null } }, { imageUrl: { not: null } }],
+          retryCount: { lt: 3 },
+        },
+      });
+      if (moreCompleted > 0) {
+        // Wait 5 seconds between posts to avoid Instagram rate limits
+        await new Promise((r) => setTimeout(r, 5000));
+        try {
+          const nextUrl = new URL("/api/cron/publish-scheduled", request.url);
+          fetch(nextUrl.toString(), {
+            headers: { authorization: request.headers.get("authorization") || "" },
+          }).catch(() => {});
+        } catch {}
+      }
+
       return Response.json({
         success: true,
         jobId: job.id,
         instagramPostId,
         instagramUrl,
         postType: job.postType,
+        remainingToPublish: moreCompleted,
       });
     } catch (publishError) {
       // ── Handle publish failure ──────────────────────────────────────
