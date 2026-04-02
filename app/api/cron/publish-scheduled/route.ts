@@ -6,13 +6,9 @@ const META_BASE = "https://graph.facebook.com/v19.0";
 
 export async function GET(request: Request) {
   try {
-    // ── Load engine config ──────────────────────────────────────────────
-    const engine = await prisma.continuousEngine.findFirst();
-    if (!engine || !engine.enabled) {
-      return Response.json({ skipped: true, reason: "Engine not enabled" });
-    }
-
     // ── Find newest completed job ready to publish (must have media) ────
+    // Engine enabled/disabled only gates content GENERATION, not publishing.
+    // If a job is COMPLETED with media, it should always be published.
     const job = await prisma.contentJob.findFirst({
       where: {
         status: "COMPLETED",
@@ -175,14 +171,19 @@ export async function GET(request: Request) {
         data: { instagramPostId, instagramUrl },
       });
 
-      // ── Update engine counters ──────────────────────────────────────
-      await prisma.continuousEngine.update({
-        where: { id: engine.id },
-        data: {
-          totalPosted: { increment: 1 },
-          todayPosted: { increment: 1 },
-        },
-      });
+      // ── Update engine counters (find engine by brand) ──────────────
+      const engine = job.brandProfileId
+        ? await prisma.continuousEngine.findFirst({ where: { brandProfileId: job.brandProfileId } })
+        : await prisma.continuousEngine.findFirst();
+      if (engine) {
+        await prisma.continuousEngine.update({
+          where: { id: engine.id },
+          data: {
+            totalPosted: { increment: 1 },
+            todayPosted: { increment: 1 },
+          },
+        });
+      }
 
       return Response.json({
         success: true,
@@ -208,10 +209,15 @@ export async function GET(request: Request) {
       });
 
       if (newStatus === "FAILED") {
-        await prisma.continuousEngine.update({
-          where: { id: engine.id },
-          data: { totalFailed: { increment: 1 } },
-        });
+        const failEngine = job.brandProfileId
+          ? await prisma.continuousEngine.findFirst({ where: { brandProfileId: job.brandProfileId } })
+          : await prisma.continuousEngine.findFirst();
+        if (failEngine) {
+          await prisma.continuousEngine.update({
+            where: { id: failEngine.id },
+            data: { totalFailed: { increment: 1 } },
+          });
+        }
       }
 
       return Response.json(

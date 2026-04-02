@@ -298,31 +298,9 @@ export async function runMediaAgent(
   }
 
   // -----------------------------------------------------------------------
-  // Step 4B: Merge voiceover INTO video using ffmpeg
-  // Downloads static ffmpeg binary to /tmp on first run, then merges.
+  // Step 4B: Audio merge (no-op — videos post as-is from Pexels)
+  // Voiceover URL is kept on the job for future use.
   // -----------------------------------------------------------------------
-
-  if (output.videoUrl && output.voiceoverUrl) {
-    try {
-      console.log("[Media Agent] Merging voiceover into video...");
-      const { mergeAudioWithVideo } = await import("@/lib/audio-merge");
-      const { mergedUrl, merged } = await mergeAudioWithVideo(
-        output.videoUrl,
-        output.voiceoverUrl,
-        `merged-${Date.now()}`
-      );
-      if (merged) {
-        console.log(`[Media Agent] Audio merge SUCCESS — voiceover baked into video`);
-        output.videoUrl = mergedUrl;
-      } else {
-        console.log("[Media Agent] Audio merge skipped — posting video with ambient sound only");
-        output.warnings.push("Voiceover generated but not merged into video (ffmpeg unavailable). Video has ambient animal sounds.");
-      }
-    } catch (mergeErr) {
-      console.error("[Media Agent] Merge error:", mergeErr);
-      output.warnings.push("Audio merge attempted but failed. Video posts with ambient sound.");
-    }
-  }
 
   // -----------------------------------------------------------------------
   // Step 5: Save to MediaLibrary

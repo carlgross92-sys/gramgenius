@@ -11,13 +11,13 @@ const MAX_CHAINS = 10; // Process up to 10 jobs per invocation
 
 export async function GET(request: Request) {
   try {
-    // ── Load engine config ──────────────────────────────────────────────
-    const engine = await prisma.continuousEngine.findFirst();
-    if (!engine || !engine.enabled) {
-      return Response.json({ skipped: true, reason: "Engine not enabled" });
-    }
+    // ── Get ALL enabled engines (not just first one) ────────────────────
+    const engines = await prisma.continuousEngine.findMany({
+      where: { enabled: true },
+    });
 
-    // ── Find next queued job (process any queued job, ignore schedule) ──
+    // ── Find next queued job — process regardless of engine state ───────
+    // Engine enabled/disabled only gates content GENERATION, not processing
     const job = await prisma.contentJob.findFirst({
       where: {
         status: "QUEUED",
@@ -29,6 +29,11 @@ export async function GET(request: Request) {
     if (!job) {
       return Response.json({ message: "No jobs in queue" });
     }
+
+    // Find the engine for this job's brand (for config like minQualityScore)
+    const engine = engines.find((e) => e.brandProfileId === job.brandProfileId)
+      || engines[0]
+      || await prisma.continuousEngine.findFirst();
 
     // ── Mark as processing ──────────────────────────────────────────────
     await prisma.contentJob.update({
@@ -162,22 +167,10 @@ export async function GET(request: Request) {
       }
     }
 
-    // ── Step 5B: Merge voiceover into video ──────────────────────────
-    if (videoUrl && voiceoverUrl) {
-      try {
-        const { mergeAudioWithVideo } = await import("@/lib/audio-merge");
-        const { mergedUrl, merged } = await mergeAudioWithVideo(
-          videoUrl, voiceoverUrl, `job-${job.id}`
-        );
-        if (merged) {
-          videoUrl = mergedUrl;
-          qualityNotes.push("audio merge: SUCCESS — voiceover in video");
-        } else {
-          qualityNotes.push("audio merge: skipped — video has ambient sound");
-        }
-      } catch (mergeErr) {
-        qualityNotes.push(`audio merge: failed — ${mergeErr instanceof Error ? mergeErr.message : "error"}`);
-      }
+    // ── Step 5B: Audio merge removed — videos post as-is from Pexels ──
+    // Voiceover URL is kept on the job for future use.
+    if (voiceoverUrl) {
+      qualityNotes.push("voiceover: saved separately (no merge needed)");
     }
 
     // ── Step 6: Calculate quality score ─────────────────────────────────
@@ -188,7 +181,7 @@ export async function GET(request: Request) {
     if (caption && caption.length > 50) qualityScore += 20;
     if (hashtags && hashtags.length > 50) qualityScore += 10;
 
-    const minScore = engine.minQualityScore ?? 10;
+    const minScore = engine?.minQualityScore ?? 10;
     let finalStatus = "COMPLETED";
     let qualityFailed = false;
 
@@ -247,7 +240,7 @@ export async function GET(request: Request) {
         const postedToday = await prisma.contentJob.count({
           where: { status: "COMPLETED", completedAt: { gte: today } },
         });
-        const dailyTarget = engine.postsPerDay || 30;
+        const dailyTarget = engine?.postsPerDay || 30;
 
         if (postedToday < dailyTarget) {
           console.log(`[Process Queue] Backfill needed: ${postedToday}/${dailyTarget} — triggering content generation`);
