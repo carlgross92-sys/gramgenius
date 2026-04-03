@@ -1,23 +1,16 @@
 import prisma from "@/lib/prisma";
-import { generateWithClaudeJSON, generateWithClaude } from "@/lib/anthropic";
+import { generateContentBrief } from "@/lib/content-brief";
 import { searchAnimalVideo, downloadAndSaveVideo } from "@/lib/pexels";
 import { generateImage } from "@/lib/openai";
-import { checkCredits, generateVoiceoverScript, generateVoiceover } from "@/lib/elevenlabs";
-import { buildCaptionPrompt, buildVoiceoverPrompt, type ReelStyle } from "@/lib/prompt-templates";
+import { generateVoiceover, generateVoiceoverScript, checkCredits } from "@/lib/elevenlabs";
 
 export const maxDuration = 300;
 
-const MAX_CHAINS = 10; // Process up to 10 jobs per invocation
+const MAX_CHAINS = 10;
 
 export async function GET(request: Request) {
   try {
-    // ── Get ALL enabled engines (not just first one) ────────────────────
-    const engines = await prisma.continuousEngine.findMany({
-      where: { enabled: true },
-    });
-
     // ── Find next queued job — process regardless of engine state ───────
-    // Engine enabled/disabled only gates content GENERATION, not processing
     const job = await prisma.contentJob.findFirst({
       where: {
         status: "QUEUED",
@@ -27,106 +20,97 @@ export async function GET(request: Request) {
     });
 
     if (!job) {
-      return Response.json({ message: "No jobs in queue" });
+      return Response.json({ message: "No jobs in queue", processed: 0 });
     }
 
-    // Find the engine for this job's brand (for config like minQualityScore)
-    const engine = engines.find((e) => e.brandProfileId === job.brandProfileId)
-      || engines[0]
-      || await prisma.continuousEngine.findFirst();
+    console.log(`[ProcessQueue] Job: ${job.topic?.substring(0, 60)}`);
 
-    // ── Mark as processing ──────────────────────────────────────────────
+    // Mark as processing
     await prisma.contentJob.update({
       where: { id: job.id },
       data: { status: "PROCESSING", startedAt: new Date() },
     });
 
-    // ── Load brand profile for THIS JOB's brand ─────────────────────────
-    const brand = job.brandProfileId
-      ? await prisma.brandProfile.findUnique({ where: { id: job.brandProfileId } })
-      : await prisma.brandProfile.findFirst();
-    const brandHandle = brand?.instagramHandle || "funny_animals";
-    const brandVoice = brand?.brandVoice || "Humorous";
-    const brandAudience = brand?.targetAudience || "animal lovers 18-45";
-    const brandNiche = brand?.niche || "funny animals";
+    // ── Determine brand type from topic content ──────────────────────────
+    const topicLower = (job.topic || "").toLowerCase();
+    const isConservative =
+      topicLower.includes("patriot") ||
+      topicLower.includes("american") ||
+      topicLower.includes("conservative") ||
+      topicLower.includes("trump") ||
+      topicLower.includes("maga") ||
+      topicLower.includes("freedom") ||
+      topicLower.includes("faith") ||
+      topicLower.includes("woman in") ||
+      topicLower.includes("women") ||
+      topicLower.includes("flag") ||
+      topicLower.includes("bible") ||
+      topicLower.includes("prayer") ||
+      topicLower.includes("sundress") ||
+      topicLower.includes("blazer");
 
-    let caption: string | null = null;
-    let hashtags: string | null = null;
-    let animal: string | null = null;
+    // Also check brand profile
+    let brandIsConservative = false;
+    if (job.brandProfileId) {
+      const brand = await prisma.brandProfile.findUnique({
+        where: { id: job.brandProfileId },
+      });
+      if (brand) {
+        brandIsConservative =
+          brand.instagramHandle === "karinagarcia5019" ||
+          brand.name.toLowerCase().includes("karina");
+      }
+    }
+
+    const brandType =
+      isConservative || brandIsConservative ? "conservative" : "funny_animals";
+    const brandVoice =
+      brandType === "conservative" ? "Bold & Direct" : "Humorous";
+    const audience =
+      brandType === "conservative"
+        ? "Conservative Americans who love patriotism and traditional values"
+        : "Animal lovers who want funny and cute pet content";
+
+    console.log(`[ProcessQueue] Brand type: ${brandType}`);
+
+    // ── STEP 1: Generate unified content brief ───────────────────────────
+    console.log("[ProcessQueue] Generating content brief...");
+    const brief = await generateContentBrief(brandType, brandVoice, audience);
+    console.log(
+      `[ProcessQueue] Brief: query="${brief.pexelsQuery}" hook="${brief.hook}"`
+    );
+
+    // ── STEP 2: Find matching video from Pexels ─────────────────────────
     let videoUrl: string | null = null;
     let imageUrl: string | null = null;
-    let voiceoverUrl: string | null = null;
-    let voiceStatus: "OK" | "FAILED" | "RETRY_OK" | "MISSING" = "MISSING";
-    const modelUsed = "claude-sonnet + pexels + elevenlabs";
+    let animal: string | null = null;
     const qualityNotes: string[] = [];
 
-    // ── Step 1: Generate caption using Brand Brain + Prompt Templates ──
-    const reelStyle = (job.reelStyle || "funny") as ReelStyle;
-    try {
-      const captionPrompt = buildCaptionPrompt({
-        brandName: brand?.name || "Funny Animals",
-        brandHandle,
-        niche: brandNiche,
-        pillar: job.topic,
-        brandVoice,
-        reelStyle,
-        topic: job.topic,
-        targetAudience: brandAudience,
-      });
-      caption = await generateWithClaude(
-        captionPrompt,
-        `Write a ${brandVoice.toLowerCase()} caption for: "${job.topic}"`,
-        512
-      );
-      caption = caption.replace(/^["']|["']$/g, "").trim();
-      qualityNotes.push("caption: ok");
-    } catch (err) {
-      qualityNotes.push(`caption: failed - ${err instanceof Error ? err.message : "unknown"}`);
-    }
+    // Extract search terms from the brief
+    const pexelsQuery = brief.pexelsQuery || "funny animal";
+    animal = pexelsQuery.split(" ").pop() || "animal";
 
-    // ── Step 2: Generate hashtags ───────────────────────────────────────
     try {
-      const hashtagResult = await generateWithClaudeJSON<string[]>(
-        `You are a hashtag strategist. Generate exactly 20 Instagram hashtags for the given topic. Mix sizes: 5 large (1M+ posts), 10 medium (100K-1M), 5 small/niche (<100K). Return a JSON array of strings, each starting with #.`,
-        `Generate 20 hashtags for: ${job.topic}\nNiche: ${brandNiche}`,
-        1024
+      console.log(`[ProcessQueue] Searching Pexels: "${pexelsQuery}"`);
+      const pexelsResult = await searchAnimalVideo(
+        brief.visualDescription,
+        pexelsQuery
       );
-      const tags = Array.isArray(hashtagResult) ? hashtagResult : [];
-      hashtags = tags.slice(0, 20).join(" ");
-      qualityNotes.push("hashtags: ok");
-    } catch (err) {
-      qualityNotes.push(`hashtags: failed - ${err instanceof Error ? err.message : "unknown"}`);
-    }
-
-    // ── Step 3: Extract animal name ─────────────────────────────────────
-    try {
-      animal = await generateWithClaude(
-        `Extract the main animal name from the given topic. Return ONLY the animal name in lowercase, nothing else. Example: "cat", "dog", "parrot".`,
-        job.topic,
-        64
-      );
-      animal = animal.trim().toLowerCase().replace(/[^a-z\s]/g, "");
-      qualityNotes.push(`animal: ${animal}`);
-    } catch (err) {
-      animal = "animal";
-      qualityNotes.push(`animal: fallback - ${err instanceof Error ? err.message : "unknown"}`);
-    }
-
-    // ── Step 4: Get media (Pexels video or DALL-E image) ────────────────
-    try {
-      const pexelsResult = await searchAnimalVideo(job.topic, animal || "animal");
       const savedUrl = await downloadAndSaveVideo(
         pexelsResult.url,
         `content-${job.id}-${Date.now()}`
       );
       videoUrl = savedUrl;
-      qualityNotes.push("video: pexels ok");
+      qualityNotes.push(`video: pexels ok (query: ${pexelsQuery})`);
+      console.log("[ProcessQueue] Video found");
     } catch (videoErr) {
-      qualityNotes.push(`video: pexels failed - ${videoErr instanceof Error ? videoErr.message : "unknown"}`);
-      // Fallback to DALL-E image
+      qualityNotes.push(
+        `video: pexels failed - ${videoErr instanceof Error ? videoErr.message : "unknown"}`
+      );
+      console.log("[ProcessQueue] Pexels failed, trying DALL-E...");
       try {
         const imageResult = await generateImage(
-          `A hilarious, viral-worthy photo of ${job.topic}. Bright colors, expressive animal face, Instagram-ready, professional quality.`,
+          `${brief.visualDescription}. Photorealistic, cinematic, portrait 9:16, no text.`,
           "1024x1792",
           "hd",
           "vivid"
@@ -134,69 +118,86 @@ export async function GET(request: Request) {
         imageUrl = imageResult.imageUrl;
         qualityNotes.push("image: dalle ok");
       } catch (imgErr) {
-        qualityNotes.push(`image: dalle failed - ${imgErr instanceof Error ? imgErr.message : "unknown"}`);
+        qualityNotes.push(
+          `image: dalle failed - ${imgErr instanceof Error ? imgErr.message : "unknown"}`
+        );
       }
     }
 
-    // ── Step 5: Generate voiceover if REEL ──────────────────────────────
-    if (job.postType === "REEL") {
-      try {
-        const credits = await checkCredits();
-        if (credits >= 100) {
-          const script = generateVoiceoverScript(
-            job.topic,
-            caption || job.topic,
-            animal || "animal"
-          );
-          const voResult = await generateVoiceover(script);
-          if (voResult.url) {
-            voiceoverUrl = voResult.url;
-            voiceStatus = "OK";
-            qualityNotes.push("voiceover: ok");
-          } else {
-            voiceStatus = "FAILED";
-            qualityNotes.push(`voiceover: skipped - ${voResult.error || "no url returned"}`);
-          }
+    // ── STEP 3: Generate voiceover from brief ────────────────────────────
+    let voiceoverUrl: string | null = null;
+    try {
+      const credits = await checkCredits();
+      if (credits >= 100) {
+        // Use the brief's voiceover script (coherent with video + caption)
+        const script =
+          brief.voiceoverScript ||
+          generateVoiceoverScript(job.topic, "", animal || "animal");
+        console.log(`[ProcessQueue] Voiceover script: "${script}"`);
+        const voResult = await generateVoiceover(script);
+        if (voResult.url) {
+          voiceoverUrl = voResult.url;
+          qualityNotes.push("voiceover: ok");
         } else {
-          voiceStatus = "FAILED";
-          qualityNotes.push(`voiceover: skipped - low credits (${credits})`);
+          qualityNotes.push(
+            `voiceover: skipped - ${voResult.error || "no url"}`
+          );
         }
-      } catch (voErr) {
-        voiceStatus = "FAILED";
-        qualityNotes.push(`voiceover: failed - ${voErr instanceof Error ? voErr.message : "unknown"}`);
+      } else {
+        qualityNotes.push(`voiceover: skipped - low credits (${credits})`);
       }
+    } catch (voErr) {
+      qualityNotes.push(
+        `voiceover: failed - ${voErr instanceof Error ? voErr.message : "unknown"}`
+      );
     }
 
-    // ── Step 5B: Audio merge removed — videos post as-is from Pexels ──
-    // Voiceover URL is kept on the job for future use.
-    if (voiceoverUrl) {
-      qualityNotes.push("voiceover: saved separately (no merge needed)");
-    }
+    // ── STEP 4: Build caption from brief ─────────────────────────────────
+    const caption = [brief.captionHook, "", brief.captionBody, "", brief.captionCta]
+      .join("\n")
+      .trim();
+    const hashtags = brief.hashtags;
 
-    // ── Step 6: Calculate quality score ─────────────────────────────────
+    qualityNotes.push(`caption: ${caption.length} chars`);
+    qualityNotes.push(`brief: hook="${brief.hook}" trigger=${brief.emotionalTrigger}`);
+
+    // ── STEP 5: Calculate quality score ──────────────────────────────────
     let qualityScore = 0;
-    if (videoUrl) qualityScore += 40;
+    if (videoUrl) qualityScore += 50;
     else if (imageUrl) qualityScore += 25;
-    if (voiceoverUrl) qualityScore += 30;
-    if (caption && caption.length > 50) qualityScore += 20;
+    if (voiceoverUrl) qualityScore += 25;
+    if (caption.length > 50) qualityScore += 15;
     if (hashtags && hashtags.length > 50) qualityScore += 10;
 
-    const minScore = engine?.minQualityScore ?? 10;
-    let finalStatus = "COMPLETED";
-    let qualityFailed = false;
+    const passed = (videoUrl !== null || imageUrl !== null) && qualityScore >= 25;
+    const finalStatus = passed ? "COMPLETED" : "QUALITY_FAILED";
 
-    if (qualityScore < minScore) {
-      finalStatus = "QUALITY_FAILED";
-      qualityFailed = true;
-      qualityNotes.push(`quality: ${qualityScore} < min ${minScore}`);
+    console.log(
+      `[ProcessQueue] Quality: ${qualityScore} - ${passed ? "PASSED" : "FAILED"}`
+    );
+
+    // ── STEP 6: Save to MediaLibrary ─────────────────────────────────────
+    try {
+      await prisma.mediaLibrary.create({
+        data: {
+          type: videoUrl ? "VIDEO" : "IMAGE",
+          url: videoUrl || imageUrl || "",
+          thumbnailUrl: undefined,
+          topic: job.topic || brief.hook,
+          caption,
+          hashtags,
+          postType: videoUrl ? "REEL" : "FEED",
+          status: "SAVED",
+          voiceoverUrl: voiceoverUrl || undefined,
+          videoSource: videoUrl ? "PEXELS" : "DALLE",
+          brandProfileId: job.brandProfileId || undefined,
+        },
+      });
+    } catch {
+      // Non-critical
     }
 
-    // Voice is nice-to-have, not required — never fail just for missing voiceover
-    if ((job.postType === "REEL" || job.mediaType === "video") && !voiceoverUrl) {
-      qualityNotes.push("VOICE_NOTE: No voiceover — posting without voice");
-    }
-
-    // ── Update job with results ─────────────────────────────────────────
+    // ── STEP 7: Update job ───────────────────────────────────────────────
     await prisma.contentJob.update({
       where: { id: job.id },
       data: {
@@ -208,14 +209,30 @@ export async function GET(request: Request) {
         imageUrl,
         voiceoverUrl,
         voiceStatus: voiceoverUrl ? "OK" : "FAILED",
-        modelUsed,
+        modelUsed: "content-brief + pexels + elevenlabs",
         qualityScore,
         qualityNotes: qualityNotes.join("; "),
         completedAt: new Date(),
+        failReason: !passed
+          ? `Quality score ${qualityScore} below threshold`
+          : null,
       },
     });
 
-    // ── Chain to process next job (regardless of this job's result) ─────
+    // ── Chain: publish completed jobs ─────────────────────────────────────
+    try {
+      const publishUrl = new URL(
+        "/api/cron/publish-scheduled",
+        request.url
+      ).toString();
+      fetch(publishUrl, {
+        headers: {
+          authorization: request.headers.get("authorization") || "",
+        },
+      }).catch(() => {});
+    } catch {}
+
+    // ── Chain: process next queued job ────────────────────────────────────
     const url = new URL(request.url);
     const currentChain = parseInt(url.searchParams.get("chain") || "0", 10);
 
@@ -224,21 +241,15 @@ export async function GET(request: Request) {
         where: { status: "QUEUED", retryCount: { lt: 3 } },
       });
 
-      // ── Always try to publish completed jobs after processing ──────
-      try {
-        const publishUrl = new URL("/api/cron/publish-scheduled", request.url);
-        fetch(publishUrl.toString(), {
-          headers: { authorization: request.headers.get("authorization") || "" },
-        }).catch(() => {});
-      } catch {}
-
       if (moreQueued > 0) {
         await new Promise((r) => setTimeout(r, 3000));
         try {
           const nextUrl = new URL("/api/cron/process-queue", request.url);
           nextUrl.searchParams.set("chain", String(currentChain + 1));
           fetch(nextUrl.toString(), {
-            headers: { authorization: request.headers.get("authorization") || "" },
+            headers: {
+              authorization: request.headers.get("authorization") || "",
+            },
           }).catch(() => {});
         } catch {}
       }
@@ -246,16 +257,31 @@ export async function GET(request: Request) {
 
     return Response.json({
       success: true,
-      jobId: job.id,
-      status: finalStatus,
+      passed,
       qualityScore,
+      hasVideo: !!videoUrl,
+      hasImage: !!imageUrl,
+      hasVoiceover: !!voiceoverUrl,
+      pexelsQuery: brief.pexelsQuery,
+      hook: brief.hook,
+      voiceoverScript: brief.voiceoverScript,
       qualityNotes,
-      media: { videoUrl, imageUrl, voiceoverUrl },
     });
   } catch (error) {
-    console.error("[process-queue] Error:", error);
+    console.error("[ProcessQueue] Error:", error);
+
+    // Reset stuck processing jobs
+    await prisma.contentJob
+      .updateMany({
+        where: { status: "PROCESSING" },
+        data: { status: "QUEUED", retryCount: { increment: 1 } },
+      })
+      .catch(() => {});
+
     return Response.json(
-      { error: error instanceof Error ? error.message : "Queue processing failed" },
+      {
+        error: error instanceof Error ? error.message : "Queue processing failed",
+      },
       { status: 500 }
     );
   }

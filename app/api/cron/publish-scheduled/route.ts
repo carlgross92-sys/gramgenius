@@ -7,8 +7,7 @@ const META_BASE = "https://graph.facebook.com/v19.0";
 export async function GET(request: Request) {
   try {
     // ── Find newest completed job ready to publish (must have media) ────
-    // Engine enabled/disabled only gates content GENERATION, not publishing.
-    // If a job is COMPLETED with media, it should always be published.
+    // All posts go to @chewy_sacramento — use global credentials only.
     const job = await prisma.contentJob.findFirst({
       where: {
         status: "COMPLETED",
@@ -16,36 +15,23 @@ export async function GET(request: Request) {
         OR: [{ videoUrl: { not: null } }, { imageUrl: { not: null } }],
         retryCount: { lt: 3 },
       },
-      orderBy: { completedAt: "desc" },
+      orderBy: { completedAt: "asc" },
     });
 
     if (!job) {
       return Response.json({ message: "No jobs ready to publish" });
     }
 
-    // ── Load credentials: brand-specific first, then global fallback ────
-    let accessToken: string | null = null;
-    let igUserId: string | null = null;
-
-    // Try brand-specific credentials
-    if (job.brandProfileId) {
-      const brand = await prisma.brandProfile.findUnique({
-        where: { id: job.brandProfileId },
-      });
-      if (brand?.metaAccessToken && brand?.igBusinessId) {
-        accessToken = brand.metaAccessToken;
-        igUserId = brand.igBusinessId;
-        console.log(`[Publish] Using brand-specific token for @${brand.instagramHandle}`);
-      }
-    }
-
-    // Fallback to global AppSettings / env
-    if (!accessToken || !igUserId) {
-      const settings = await prisma.appSettings.findFirst();
-      accessToken = accessToken || settings?.metaAccessToken || process.env.META_ACCESS_TOKEN || null;
-      igUserId = igUserId || settings?.instagramBusinessId || process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID || null;
-      console.log("[Publish] Using global token");
-    }
+    // ── Always use global @chewy_sacramento credentials ─────────────────
+    const settings = await prisma.appSettings.findFirst();
+    const accessToken =
+      process.env.META_ACCESS_TOKEN ||
+      settings?.metaAccessToken ||
+      null;
+    const igUserId =
+      process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID ||
+      settings?.instagramBusinessId ||
+      null;
 
     if (!accessToken || !igUserId) {
       return Response.json(
@@ -54,7 +40,11 @@ export async function GET(request: Request) {
       );
     }
 
-    // ── Format caption (caption + hashtags, max 2200 chars) ─────────────
+    console.log(
+      `[Publish] Publishing job ${job.id}: "${job.topic?.substring(0, 50)}"`
+    );
+
+    // ── Format caption (caption + hashtags, max 2200 chars) ──────────────
     let fullCaption = (job.caption || "").trim();
     if (job.hashtags) {
       const combined = fullCaption + "\n\n" + job.hashtags;
@@ -66,8 +56,7 @@ export async function GET(request: Request) {
 
     try {
       if (job.videoUrl) {
-        // Post any job with video as a REEL
-        // ── Create Reel container ─────────────────────────────────────
+        // ── Create Reel container ────────────────────────────────────────
         const containerRes = await fetch(`${META_BASE}/${igUserId}/media`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -79,15 +68,19 @@ export async function GET(request: Request) {
           }),
         });
         const containerData = await containerRes.json();
-        console.log(`[Publish] Container response: ${JSON.stringify(containerData).substring(0, 200)}`);
+        console.log(
+          `[Publish] Container: ${JSON.stringify(containerData).substring(0, 200)}`
+        );
         if (containerData.error) {
-          throw new Error(`Container creation: ${containerData.error.message || JSON.stringify(containerData.error)}`);
+          throw new Error(
+            `Container creation: ${containerData.error.message || JSON.stringify(containerData.error)}`
+          );
         }
         const containerId = containerData.id;
 
-        // ── Poll container status ───────────────────────────────────
+        // ── Poll container status ────────────────────────────────────────
         const pollStart = Date.now();
-        const pollTimeout = 300000; // 5 minutes
+        const pollTimeout = 240000; // 4 minutes
         let containerReady = false;
 
         while (Date.now() - pollStart < pollTimeout) {
@@ -101,7 +94,9 @@ export async function GET(request: Request) {
             break;
           }
           if (statusData.status_code === "ERROR") {
-            throw new Error(`Reel container ERROR: ${JSON.stringify(statusData).substring(0, 200)}`);
+            throw new Error(
+              `Reel container ERROR: ${JSON.stringify(statusData).substring(0, 200)}`
+            );
           }
 
           await new Promise((r) => setTimeout(r, 3000));
@@ -111,22 +106,27 @@ export async function GET(request: Request) {
           throw new Error("Reel container polling timed out");
         }
 
-        // ── Publish container ───────────────────────────────────────
-        const publishRes = await fetch(`${META_BASE}/${igUserId}/media_publish`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            creation_id: containerId,
-            access_token: accessToken,
-          }),
-        });
+        // ── Publish container ────────────────────────────────────────────
+        const publishRes = await fetch(
+          `${META_BASE}/${igUserId}/media_publish`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              creation_id: containerId,
+              access_token: accessToken,
+            }),
+          }
+        );
         const publishData = await publishRes.json();
         if (publishData.error) {
-          throw new Error(publishData.error.message || "Failed to publish reel");
+          throw new Error(
+            publishData.error.message || "Failed to publish reel"
+          );
         }
         instagramPostId = publishData.id;
       } else if (job.imageUrl) {
-        // ── Create image container ──────────────────────────────────
+        // ── Create image container ───────────────────────────────────────
         const containerRes = await fetch(`${META_BASE}/${igUserId}/media`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -138,42 +138,49 @@ export async function GET(request: Request) {
         });
         const containerData = await containerRes.json();
         if (containerData.error) {
-          throw new Error(containerData.error.message || "Failed to create image container");
+          throw new Error(
+            containerData.error.message || "Failed to create image container"
+          );
         }
         const containerId = containerData.id;
 
-        // ── Publish container ───────────────────────────────────────
-        const publishRes = await fetch(`${META_BASE}/${igUserId}/media_publish`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            creation_id: containerId,
-            access_token: accessToken,
-          }),
-        });
+        const publishRes = await fetch(
+          `${META_BASE}/${igUserId}/media_publish`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              creation_id: containerId,
+              access_token: accessToken,
+            }),
+          }
+        );
         const publishData = await publishRes.json();
         if (publishData.error) {
-          throw new Error(publishData.error.message || "Failed to publish image");
+          throw new Error(
+            publishData.error.message || "Failed to publish image"
+          );
         }
         instagramPostId = publishData.id;
       } else {
-        throw new Error("No media available to publish (no videoUrl or imageUrl)");
+        throw new Error("No media available to publish");
       }
 
-      // Build Instagram URL
       if (instagramPostId) {
         instagramUrl = `https://www.instagram.com/p/${instagramPostId}/`;
       }
 
-      // ── Update job with success ─────────────────────────────────────
+      // ── Update job with success ────────────────────────────────────────
       await prisma.contentJob.update({
         where: { id: job.id },
         data: { instagramPostId, instagramUrl },
       });
 
-      // ── Update engine counters (find engine by brand) ──────────────
+      // ── Update engine counters ─────────────────────────────────────────
       const engine = job.brandProfileId
-        ? await prisma.continuousEngine.findFirst({ where: { brandProfileId: job.brandProfileId } })
+        ? await prisma.continuousEngine.findFirst({
+            where: { brandProfileId: job.brandProfileId },
+          })
         : await prisma.continuousEngine.findFirst();
       if (engine) {
         await prisma.continuousEngine.update({
@@ -185,7 +192,9 @@ export async function GET(request: Request) {
         });
       }
 
-      // ── Chain: publish next completed job if any ───────────────────
+      console.log(`[Publish] Posted: ${instagramUrl}`);
+
+      // ── Chain: publish next completed job ──────────────────────────────
       const moreCompleted = await prisma.contentJob.count({
         where: {
           status: "COMPLETED",
@@ -195,12 +204,17 @@ export async function GET(request: Request) {
         },
       });
       if (moreCompleted > 0) {
-        // Wait 5 seconds between posts to avoid Instagram rate limits
+        // 5s delay between posts to avoid Instagram rate limits
         await new Promise((r) => setTimeout(r, 5000));
         try {
-          const nextUrl = new URL("/api/cron/publish-scheduled", request.url);
-          fetch(nextUrl.toString(), {
-            headers: { authorization: request.headers.get("authorization") || "" },
+          const nextUrl = new URL(
+            "/api/cron/publish-scheduled",
+            request.url
+          ).toString();
+          fetch(nextUrl, {
+            headers: {
+              authorization: request.headers.get("authorization") || "",
+            },
           }).catch(() => {});
         } catch {}
       }
@@ -214,9 +228,11 @@ export async function GET(request: Request) {
         remainingToPublish: moreCompleted,
       });
     } catch (publishError) {
-      // ── Handle publish failure ──────────────────────────────────────
+      // ── Handle publish failure ─────────────────────────────────────────
       const failReason =
-        publishError instanceof Error ? publishError.message : "Publish failed";
+        publishError instanceof Error
+          ? publishError.message
+          : "Publish failed";
       const newRetryCount = (job.retryCount || 0) + 1;
       const newStatus = newRetryCount >= 3 ? "FAILED" : "COMPLETED";
 
@@ -231,7 +247,9 @@ export async function GET(request: Request) {
 
       if (newStatus === "FAILED") {
         const failEngine = job.brandProfileId
-          ? await prisma.continuousEngine.findFirst({ where: { brandProfileId: job.brandProfileId } })
+          ? await prisma.continuousEngine.findFirst({
+              where: { brandProfileId: job.brandProfileId },
+            })
           : await prisma.continuousEngine.findFirst();
         if (failEngine) {
           await prisma.continuousEngine.update({
