@@ -1,5 +1,9 @@
 import { generateWithClaude } from "@/lib/anthropic";
 
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
 export interface ContentBrief {
   hook: string;
   emotionalTrigger: string;
@@ -11,206 +15,281 @@ export interface ContentBrief {
   captionBody: string;
   captionCta: string;
   hashtags: string;
+  /** Index into the DALLE/Pexels/voice/caption arrays for matched sets */
+  templateIndex: number;
+  /** Whether to use DALL-E as primary media source */
+  useDallePrimary: boolean;
 }
 
-const ANIMAL_FALLBACKS: ContentBrief[] = [
+// ---------------------------------------------------------------------------
+// KARINA — DALL-E prompts (primary media source)
+// Young attractive women 22-30, conservative look, portrait 9:16
+// ---------------------------------------------------------------------------
+
+export const KARINA_DALLE_PROMPTS = [
+  "Stunning young woman aged 22-28, long natural brown hair, wearing elegant white sundress, standing in golden wheat field at sunset holding small American flag, warm smile, blue eyes, no tattoos, natural makeup, photorealistic, portrait orientation 9:16, cinematic lighting",
+  "Beautiful young woman aged 23-30, flowing blonde hair, red white and blue summer dress, standing on wooden porch of farmhouse at sunrise, hand over heart, confident smile, American countryside background, photorealistic portrait",
+  "Attractive young woman aged 22-28, natural brunette hair, modest blue dress, sitting in church pew with Bible open, morning light streaming through stained glass, peaceful expression, photorealistic portrait orientation",
+  "Gorgeous young woman aged 24-30, long auburn hair, wearing fitted red blazer, standing confidently in front of American flag backdrop, professional smile, no tattoos, natural beauty, photorealistic portrait 9:16",
+  "Beautiful young woman aged 22-27, natural blonde waves, white lace top, standing at beach at golden hour with small cross necklace, serene smile, wind in hair, photorealistic portrait orientation cinematic",
+  "Stunning young woman aged 23-29, dark brunette hair, floral sundress, sitting on tailgate of pickup truck at sunset with American flag, genuine smile, countryside background, photorealistic portrait 9:16",
+  "Attractive young woman aged 22-28, long natural hair, white button shirt jeans boots, standing in forest with hand on tree, confident outdoorsy look, no heavy makeup, natural beauty, cinematic portrait orientation",
+  "Beautiful young woman aged 24-30, honey blonde hair, wearing elegant navy dress, standing at military memorial placing flowers, respectful expression, photorealistic portrait orientation cinematic lighting",
+  "Gorgeous young woman aged 22-27, natural brown hair, cozy oversized sweater, sitting by fireplace with Bible and coffee mug, warm home setting, genuine smile, photorealistic portrait 9:16",
+  "Stunning young woman aged 23-29, flowing red hair, patriotic red white blue outfit, standing on mountain peak with arms raised confidently, American flag visible, photorealistic portrait orientation golden hour",
+];
+
+// ---------------------------------------------------------------------------
+// KARINA — Pexels backup queries (if DALL-E fails)
+// ---------------------------------------------------------------------------
+
+export const KARINA_PEXELS_QUERIES = [
+  "young woman smile outdoor",
+  "beautiful woman golden hour",
+  "young woman long hair nature",
+  "attractive woman summer",
+  "young woman confident portrait",
+  "woman smile blue sky",
+  "young woman dress outdoor",
+  "beautiful woman sunrise",
+  "young woman nature portrait",
+  "woman happy outdoor summer",
+];
+
+// ---------------------------------------------------------------------------
+// KARINA — Voiceover scripts (matched by index to DALLE prompts)
+// ---------------------------------------------------------------------------
+
+export const KARINA_VOICE_SCRIPTS = [
+  "Beautiful, faithful, and unapologetic. This is what we stand for.",
+  "Real strength. Real beauty. Real values. God bless America.",
+  "She never apologizes for loving God, family, and country.",
+  "Traditional values, timeless beauty. This is the real America.",
+  "Faith over fear. Family over everything. Freedom always.",
+  "This is what a real American woman looks like. Stunning.",
+  "Conservative, confident, and absolutely beautiful. Goals.",
+  "She knows who she is and she is not sorry. Iconic.",
+  "Beauty, grace, and patriotism. Everything we love.",
+  "Raising the next generation right. This is what matters.",
+];
+
+// ---------------------------------------------------------------------------
+// KARINA — Caption templates (matched by index to DALLE prompts)
+// ---------------------------------------------------------------------------
+
+export const KARINA_CAPTION_TEMPLATES = [
   {
-    hook: "Nobody told this dog",
-    emotionalTrigger: "laugh",
-    pexelsQuery: "funny dog",
-    visualDescription: "Dog doing something completely ridiculous with zero shame",
-    voiceoverScript: "The audacity. The nerve. The absolute legend.",
-    voiceTone: "funny",
-    captionHook: "This dog has zero regrets",
-    captionBody: "He said I do what I want.\nAnd honestly? We respect it.\nThis energy is everything.",
-    captionCta: "Tag someone who acts exactly like this",
-    hashtags: "#dog #dogsofinstagram #funny #funnydogs #pet #dogmom #doglife #cute #doglover #doggo #puppy #pets #dogvideos #viral #reels #funnyanimals #animals #petlover #doglovers #petsofinstagram",
+    hook: "This woman is everything \u{1f1fa}\u{1f1f8}",
+    body: "Beautiful. Strong. Faithful.\nUnapologetically conservative.\nThis is what we stand for.",
+    cta: "Follow if you agree \u{1f447} | Tag a strong woman \u{1f49b}",
   },
   {
-    hook: "Cat said absolutely not",
-    emotionalTrigger: "laugh",
-    pexelsQuery: "funny cat",
-    visualDescription: "Cat refusing to cooperate with dramatic attitude",
-    voiceoverScript: "Caught in the act and not even sorry about it.",
-    voiceTone: "funny",
-    captionHook: "This cat owns the house",
-    captionBody: "You just pay the rent.\nThey just live their best life.\nZero apologies given.",
-    captionCta: "Follow for more chaos",
-    hashtags: "#cat #catsofinstagram #funnycat #catlife #kitten #catvideos #catlover #cute #kitty #meow #funnycats #viral #reels #animals #petlife #catmom #catlady #catlovers #cats #petsofinstagram",
+    hook: "Real beauty never goes out of style \u2728",
+    body: "Faith. Family. Freedom.\nNo apologies. No compromises.\nJust love for God and country.",
+    cta: "Drop a \u{1f1fa}\u{1f1f8} if you feel this | Follow for more",
   },
   {
-    hook: "Puppy discovers the world",
-    emotionalTrigger: "awe",
-    pexelsQuery: "puppy playing",
-    visualDescription: "Puppy experiencing something for the first time with adorable clumsiness",
-    voiceoverScript: "This energy. This is the content we all needed today.",
-    voiceTone: "warm",
-    captionHook: "POV your heart just melted",
-    captionBody: "First time seeing snow.\nFirst time catching a ball.\nEvery day is a new adventure.",
-    captionCta: "Save this for when you need a smile",
-    hashtags: "#puppy #puppylove #puppiesofinstagram #cute #dog #adorable #babydog #puppylife #dogsofinstagram #cutepuppy #viral #reels #funny #animals #pets #dogmom #puppydog #cuteanimals #puppies #petsofinstagram",
+    hook: "She said what we all needed to hear \u{1f64f}",
+    body: "Traditional values.\nTimeless grace.\nAmerican pride in every breath.",
+    cta: "Tag someone who embodies this \u{1f447} | Follow \u{1f514}",
   },
   {
-    hook: "When your pet is dramatic",
-    emotionalTrigger: "laugh",
-    pexelsQuery: "cute pet reaction",
-    visualDescription: "Pet making exaggerated facial expressions at something harmless",
-    voiceoverScript: "Main character behavior and we are here for it.",
-    voiceTone: "energetic",
-    captionHook: "The drama is UNREAL",
-    captionBody: "Oscar-worthy performance.\nHollywood is calling.\nThis pet deserves an award.",
-    captionCta: "Tag the most dramatic person you know",
-    hashtags: "#pet #pets #petsofinstagram #funny #funnyanimals #cute #drama #viral #reels #dogmom #catmom #petlife #animalvideos #comedy #trending #explore #fyp #foryou #meme #hilarious",
+    hook: "Conservative women are the best women \u{1f985}",
+    body: "Strong in faith.\nGentle in spirit.\nUnbreakable in values.",
+    cta: "Agree? Drop a \u2764\ufe0f | Follow for daily inspiration",
   },
   {
-    hook: "Animals being pure chaos",
-    emotionalTrigger: "laugh",
-    pexelsQuery: "animals playing together",
-    visualDescription: "Multiple animals in chaotic playful situation",
-    voiceoverScript: "Living rent free and thriving. Goals honestly.",
-    voiceTone: "energetic",
-    captionHook: "Pure unfiltered chaos",
-    captionBody: "No thoughts. Just vibes.\nThey woke up and chose violence.\nAnd we absolutely love it.",
-    captionCta: "Share with someone who needs this energy",
-    hashtags: "#animals #funnyanimals #pets #cute #dog #cat #viral #reels #comedy #funny #petlife #animalvideos #trending #explore #cuteanimals #animallover #wholesome #memes #fyppage #dailylaughs",
+    hook: "God family country. In that order. \u{1f1fa}\u{1f1f8}",
+    body: "She knows her worth.\nShe knows her values.\nAnd she never apologizes for either.",
+    cta: "Share with someone who needs this today \u{1f64f}",
+  },
+  {
+    hook: "This is what American beauty looks like \u{1f49b}",
+    body: "Not what Hollywood tells you.\nNot what the media pushes.\nThe real thing. Right here.",
+    cta: "Follow for more real American content \u{1f1fa}\u{1f1f8}",
+  },
+  {
+    hook: "Raising the standard \u{1f64c}",
+    body: "Faith over fear.\nFamily over fame.\nFreedom over everything.",
+    cta: "Tag a conservative woman who inspires you \u{1f447}",
+  },
+  {
+    hook: "She gives us hope \u{1f54a}\ufe0f",
+    body: "Beautiful inside and out.\nGrounded in faith.\nProud to be American.",
+    cta: "Follow if this is your vibe \u{1f1fa}\u{1f1f8} | Share \u2764\ufe0f",
   },
 ];
 
-const CONSERVATIVE_FALLBACKS: ContentBrief[] = [
+// ---------------------------------------------------------------------------
+// KARINA — Hashtag sets
+// ---------------------------------------------------------------------------
+
+const KARINA_HASHTAGS = [
+  "#conservative #america #patriot #maga #trump #usa #freedom #faith #family #americanflag #proud #traditional #godblessamerica #republican #americanwoman #patriotic #liberty #constitution #1776 #redwhiteandblue",
+  "#conservativewoman #faithoverfear #godfirst #americanpride #traditional #familyvalues #blessed #strongwomen #usa #patriotic #maga #trump2024 #godblessamerica #freedom #liberty #christian #prayer #bible #grateful #proudamerican",
+  "#faith #family #freedom #conservative #america #patriot #maga #traditional #godblessamerica #blessed #prayer #christian #bible #godsgrace #womenoffaith #americanbeauty #proudamerican #values #liberty #republic",
+];
+
+// ---------------------------------------------------------------------------
+// CHEWY — Pexels queries for funny animals
+// ---------------------------------------------------------------------------
+
+export const ANIMAL_PEXELS_QUERIES = [
+  "golden retriever funny",
+  "puppy excited playing",
+  "dog running fast",
+  "cat funny reaction",
+  "kitten playing toy",
+  "dog catching treat",
+  "puppy first snow",
+  "cat knocking things",
+  "dog splashing water",
+  "puppy zoomies yard",
+  "dog swimming funny",
+  "cat surprised funny",
+  "puppy learning walk",
+  "dog howling funny",
+  "corgi running funny",
+];
+
+// ---------------------------------------------------------------------------
+// CHEWY — Caption templates
+// ---------------------------------------------------------------------------
+
+export const ANIMAL_CAPTION_TEMPLATES = [
   {
-    hook: "This is American pride",
-    emotionalTrigger: "pride",
-    pexelsQuery: "patriotic woman flag",
-    visualDescription: "Beautiful confident woman with American flag at golden hour",
-    voiceoverScript: "This is what real American pride looks like.",
-    voiceTone: "proud",
-    captionHook: "Real American pride looks like this",
-    captionBody: "No apologies. No shame.\nJust love for this country.\nThis is what we stand for.",
-    captionCta: "Follow if you stand with America",
-    hashtags: "#conservative #america #patriot #maga #trump #usa #freedom #faith #family #americanflag #proud #traditional #godblessamerica #republican #americanwoman #patriotic #liberty #constitution #1776 #redwhiteandblue",
+    hook: "The confidence is unmatched \u{1f62d}",
+    body: "This animal said I run this house.\nZero regrets. Zero shame.\nAbsolute legend behavior.",
+    cta: "Tag someone who acts exactly like this \u{1f447}",
   },
   {
-    hook: "Faith over everything always",
-    emotionalTrigger: "inspire",
-    pexelsQuery: "woman praying sunrise",
-    visualDescription: "Woman in prayer or reading bible in beautiful morning light",
-    voiceoverScript: "Faith over fear. Family over everything. Always.",
-    voiceTone: "warm",
-    captionHook: "Faith over fear. Always.",
-    captionBody: "Start every morning with prayer.\nGod has a plan for you.\nTrust the journey.",
-    captionCta: "Type AMEN if you believe",
-    hashtags: "#faith #godfirst #prayer #christian #blessed #believe #godisgood #faithoverfear #jesus #bible #godblessamerica #conservative #family #grateful #spiritual #worship #churchlife #amen #godsgrace #faithjourney",
+    hook: "Nobody told them the rules \u{1f602}",
+    body: "And honestly?\nWe are glad they never found out.\nThis energy is everything.",
+    cta: "Follow for your daily dose of this \u{1f43e}",
   },
   {
-    hook: "Strong women built America",
-    emotionalTrigger: "pride",
-    pexelsQuery: "confident woman outdoors",
-    visualDescription: "Strong confident woman standing tall in golden light",
-    voiceoverScript: "Beautiful. Strong. Unapologetic. That is what we are.",
-    voiceTone: "proud",
-    captionHook: "Beautiful. Strong. Unapologetic.",
-    captionBody: "We don't need permission.\nWe don't need approval.\nWe know who we are.",
-    captionCta: "Share if this is you",
-    hashtags: "#strongwomen #conservative #america #patriot #womenempowerment #traditional #faith #family #freedom #usa #maga #trump #republican #godblessamerica #americanwoman #confident #beautiful #blessed #proudamerican #traditionalvalues",
+    hook: "POV: your pet owns the house \u{1f3e0}",
+    body: "You just pay the bills.\nThey set the vibe.\nAnd we would not have it any other way.",
+    cta: "Tag your pet's owner... I mean roommate \u{1f447}",
   },
   {
-    hook: "Family is everything period",
-    emotionalTrigger: "inspire",
-    pexelsQuery: "happy family outdoors",
-    visualDescription: "Warm family moment in beautiful natural setting",
-    voiceoverScript: "Family is not just important. It is everything.",
-    voiceTone: "warm",
-    captionHook: "Family is everything",
-    captionBody: "In a world of chaos.\nThey are your peace.\nProtect what matters most.",
-    captionCta: "Tag your family",
-    hashtags: "#family #familyfirst #blessed #love #faith #conservative #traditional #familyvalues #home #grateful #america #godfirst #parents #motherhood #fatherhood #familytime #traditionalfamily #homeschool #wholesome #values",
+    hook: "Living rent free and thriving \u{1f602}",
+    body: "Not a care in the world.\nNot a single apology.\nGoals honestly.",
+    cta: "Drop a \u{1f43e} if your pet does this | Follow \u{1f514}",
   },
   {
-    hook: "Freedom is not free ever",
-    emotionalTrigger: "pride",
-    pexelsQuery: "american flag sunset",
-    visualDescription: "American flag waving dramatically at sunset, cinematic",
-    voiceoverScript: "Freedom is not free. Never forget that. God bless America.",
-    voiceTone: "dramatic",
-    captionHook: "Freedom is not free",
-    captionBody: "Someone paid the price.\nSomeone made the sacrifice.\nNever take it for granted.",
-    captionCta: "Follow for more American pride",
-    hashtags: "#freedom #america #usa #patriot #military #veteran #godblessamerica #conservative #maga #trump #liberty #constitution #1776 #flag #americanflag #proudamerican #sacrifice #honor #respect #republic",
+    hook: "This is the content we needed today \u{1f64c}",
+    body: "No drama. No stress.\nJust pure unfiltered joy.\nWe do not deserve animals.",
+    cta: "Share with someone who needs a smile \u{1f60a}",
+  },
+  {
+    hook: "Main character behavior only \u{1f451}",
+    body: "They woke up and chose chaos.\nAnd honestly?\nSame.",
+    cta: "Tag your main character pet \u{1f447} | Follow \u{1f43e}",
   },
 ];
+
+// ---------------------------------------------------------------------------
+// CHEWY — Voice scripts
+// ---------------------------------------------------------------------------
+
+export const ANIMAL_VOICE_SCRIPTS = [
+  "The audacity. The nerve. The absolute legend.",
+  "Caught in the act and not even sorry about it.",
+  "This energy. This is the content we all needed today.",
+  "Main character behavior and we are here for it.",
+  "Living rent free and thriving. Goals honestly.",
+  "Nobody told them the rules. We respect that honestly.",
+  "POV your pet owns the house. You just pay rent.",
+  "The confidence is unmatched. Tag a friend right now.",
+  "When they know exactly what they are doing. Iconic.",
+  "Pure unfiltered chaos and we absolutely love it.",
+];
+
+// ---------------------------------------------------------------------------
+// CHEWY — Hashtag sets
+// ---------------------------------------------------------------------------
+
+const ANIMAL_HASHTAGS = [
+  "#dog #dogsofinstagram #funny #funnydogs #pet #dogmom #doglife #cute #doglover #doggo #puppy #pets #dogvideos #viral #reels #funnyanimals #animals #petlover #doglovers #petsofinstagram",
+  "#cat #catsofinstagram #funnycat #catlife #kitten #catvideos #catlover #cute #kitty #meow #funnycats #viral #reels #animals #petlife #catmom #catlady #catlovers #cats #petsofinstagram",
+  "#puppy #puppylove #puppiesofinstagram #cute #dog #adorable #babydog #puppylife #dogsofinstagram #cutepuppy #viral #reels #funny #animals #pets #dogmom #puppydog #cuteanimals #puppies #petsofinstagram",
+  "#animals #funnyanimals #pets #cute #dog #cat #viral #reels #comedy #funny #petlife #animalvideos #trending #explore #cuteanimals #animallover #wholesome #memes #fyppage #dailylaughs",
+];
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function pick<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function pickIdx(len: number): number {
+  return Math.floor(Math.random() * len);
+}
+
+// ---------------------------------------------------------------------------
+// generateContentBrief — returns a fully matched set of prompts
+// ---------------------------------------------------------------------------
 
 export async function generateContentBrief(
   brandType: "funny_animals" | "conservative",
-  brandVoice: string,
-  targetAudience: string
+  _brandVoice: string,
+  _targetAudience: string
 ): Promise<ContentBrief> {
-  const fallbacks =
-    brandType === "funny_animals" ? ANIMAL_FALLBACKS : CONSERVATIVE_FALLBACKS;
-
-  const brandContext =
-    brandType === "funny_animals"
-      ? `BRAND TYPE: Funny Animals Entertainment
-CONTENT: Dogs, cats, puppies, kittens doing hilarious or adorable things
-EMOTIONAL TRIGGER: Make people laugh and feel warm
-VOICE STYLE: Funny, sarcastic, relatable, playful
-CAPTION STYLE: Like a friend texting you something hilarious
-EXAMPLE HOOKS: "This dog said absolutely not", "Nobody told this cat the rules", "The confidence is unmatched"`
-      : `BRAND TYPE: Conservative Lifestyle Women
-CONTENT: Beautiful confident patriotic American women
-EMOTIONAL TRIGGER: Pride, strength, inspiration, patriotism
-VOICE STYLE: Bold, proud, inspiring, direct
-CAPTION STYLE: Strong statement that makes conservatives nod
-EXAMPLE HOOKS: "This is what real American pride looks like", "Beautiful. Strong. Unapologetic.", "Faith over fear. Always."`;
-
-  const prompt = `You are a viral Instagram content director with 10M+ followers.
-Create a complete content brief for one Instagram Reel.
-
-${brandContext}
-
-Generate a brief where VIDEO + VOICE + CAPTION tell ONE unified story.
-
-Return ONLY valid JSON in this exact format:
-{
-  "hook": "5 words max shown on screen first",
-  "emotionalTrigger": "laugh OR awe OR pride OR relate OR inspire",
-  "pexelsQuery": "2-3 word Pexels search like: funny dog OR patriotic woman",
-  "visualDescription": "Describe exactly what the ideal 10-second video shows",
-  "voiceoverScript": "Exact words spoken aloud, under 100 chars, punchy",
-  "voiceTone": "energetic OR warm OR dramatic OR funny OR proud",
-  "captionHook": "First line under 8 words, stops the scroll",
-  "captionBody": "2-3 short lines that build on the hook",
-  "captionCta": "One call to action line",
-  "hashtags": "20 hashtags starting with # separated by spaces"
+  if (brandType === "conservative") {
+    return generateKarinaBrief();
+  }
+  return generateAnimalBrief();
 }
 
-CRITICAL: pexelsQuery must be 2-3 simple words. voiceoverScript under 100 chars. ALL fields about THE SAME scene. No markdown, just JSON.`;
+// ---------------------------------------------------------------------------
+// Karina brief — DALL-E primary, matched templates
+// ---------------------------------------------------------------------------
 
-  try {
-    const raw = await generateWithClaude(
-      prompt +
-        "\n\nYou MUST respond with valid JSON only. No markdown, no code blocks, no explanation.",
-      `Generate one content brief for ${brandType === "funny_animals" ? "funny animal" : "conservative lifestyle"} Instagram content.`,
-      600
-    );
+function generateKarinaBrief(): ContentBrief {
+  const idx = pickIdx(KARINA_DALLE_PROMPTS.length);
+  const captionIdx = idx % KARINA_CAPTION_TEMPLATES.length;
+  const caption = KARINA_CAPTION_TEMPLATES[captionIdx];
 
-    const cleaned = raw
-      .replace(/```json\n?/gi, "")
-      .replace(/```\n?/g, "")
-      .trim();
-    const brief = JSON.parse(cleaned) as ContentBrief;
+  return {
+    hook: caption.hook,
+    emotionalTrigger: "pride",
+    pexelsQuery: pick(KARINA_PEXELS_QUERIES),
+    visualDescription: KARINA_DALLE_PROMPTS[idx],
+    voiceoverScript: KARINA_VOICE_SCRIPTS[idx],
+    voiceTone: "proud",
+    captionHook: caption.hook,
+    captionBody: caption.body,
+    captionCta: caption.cta,
+    hashtags: pick(KARINA_HASHTAGS),
+    templateIndex: idx,
+    useDallePrimary: true,
+  };
+}
 
-    // Validate critical fields
-    if (!brief.pexelsQuery || !brief.voiceoverScript || !brief.captionHook) {
-      throw new Error("Missing critical fields in brief");
-    }
+// ---------------------------------------------------------------------------
+// Animal brief — Pexels primary, matched templates
+// ---------------------------------------------------------------------------
 
-    return brief;
-  } catch (err) {
-    console.warn(
-      "[ContentBrief] AI generation failed, using fallback:",
-      err instanceof Error ? err.message : err
-    );
-    // Pick random fallback
-    return fallbacks[Math.floor(Math.random() * fallbacks.length)];
-  }
+function generateAnimalBrief(): ContentBrief {
+  const captionIdx = pickIdx(ANIMAL_CAPTION_TEMPLATES.length);
+  const caption = ANIMAL_CAPTION_TEMPLATES[captionIdx];
+  const voiceIdx = pickIdx(ANIMAL_VOICE_SCRIPTS.length);
+
+  return {
+    hook: caption.hook,
+    emotionalTrigger: "laugh",
+    pexelsQuery: pick(ANIMAL_PEXELS_QUERIES),
+    visualDescription: "Funny or cute animal doing something hilarious or adorable",
+    voiceoverScript: ANIMAL_VOICE_SCRIPTS[voiceIdx],
+    voiceTone: "funny",
+    captionHook: caption.hook,
+    captionBody: caption.body,
+    captionCta: caption.cta,
+    hashtags: pick(ANIMAL_HASHTAGS),
+    templateIndex: captionIdx,
+    useDallePrimary: false,
+  };
 }
