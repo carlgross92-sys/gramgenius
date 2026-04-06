@@ -1,5 +1,3 @@
-import { generateWithClaude } from "@/lib/anthropic";
-
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -15,32 +13,34 @@ export interface ContentBrief {
   captionBody: string;
   captionCta: string;
   hashtags: string;
-  /** Index into the DALLE/Pexels/voice/caption arrays for matched sets */
   templateIndex: number;
-  /** Whether to use DALL-E as primary media source */
   useDallePrimary: boolean;
 }
 
 // ---------------------------------------------------------------------------
-// KARINA — DALL-E prompts (primary media source)
-// Young attractive women 22-30, conservative look, portrait 9:16
+// KARINA — Photorealistic DALL-E prompts (MAGA supporter look)
 // ---------------------------------------------------------------------------
 
 export const KARINA_DALLE_PROMPTS = [
-  "Stunning young woman aged 22-28, long natural brown hair, wearing elegant white sundress, standing in golden wheat field at sunset holding small American flag, warm smile, blue eyes, no tattoos, natural makeup, photorealistic, portrait orientation 9:16, cinematic lighting",
-  "Beautiful young woman aged 23-30, flowing blonde hair, red white and blue summer dress, standing on wooden porch of farmhouse at sunrise, hand over heart, confident smile, American countryside background, photorealistic portrait",
-  "Attractive young woman aged 22-28, natural brunette hair, modest blue dress, sitting in church pew with Bible open, morning light streaming through stained glass, peaceful expression, photorealistic portrait orientation",
-  "Gorgeous young woman aged 24-30, long auburn hair, wearing fitted red blazer, standing confidently in front of American flag backdrop, professional smile, no tattoos, natural beauty, photorealistic portrait 9:16",
-  "Beautiful young woman aged 22-27, natural blonde waves, white lace top, standing at beach at golden hour with small cross necklace, serene smile, wind in hair, photorealistic portrait orientation cinematic",
-  "Stunning young woman aged 23-29, dark brunette hair, floral sundress, sitting on tailgate of pickup truck at sunset with American flag, genuine smile, countryside background, photorealistic portrait 9:16",
-  "Attractive young woman aged 22-28, long natural hair, white button shirt jeans boots, standing in forest with hand on tree, confident outdoorsy look, no heavy makeup, natural beauty, cinematic portrait orientation",
-  "Beautiful young woman aged 24-30, honey blonde hair, wearing elegant navy dress, standing at military memorial placing flowers, respectful expression, photorealistic portrait orientation cinematic lighting",
-  "Gorgeous young woman aged 22-27, natural brown hair, cozy oversized sweater, sitting by fireplace with Bible and coffee mug, warm home setting, genuine smile, photorealistic portrait 9:16",
-  "Stunning young woman aged 23-29, flowing red hair, patriotic red white blue outfit, standing on mountain peak with arms raised confidently, American flag visible, photorealistic portrait orientation golden hour",
+  "Photorealistic photograph of a stunning young American woman, 24 years old, natural blonde hair blowing in wind, wearing red MAGA hat tilted slightly, white fitted top, American flag in background, confident smile, blue eyes, slight freckles, shot on Canon R5, 85mm lens, f1.8 bokeh, golden hour lighting, Instagram photo, NOT AI generated, hyperrealistic",
+  "Real photograph of beautiful young woman 25 years old, natural brunette long hair, wearing Trump 2024 t-shirt, holding small American flag, standing at outdoor rally, crowd blurred in background, genuine smile, natural skin texture, shot on Sony A7, photojournalism style, candid moment, hyperrealistic photography NOT illustration",
+  "Candid photo of gorgeous young woman 23 years old, auburn hair, wearing red white blue outfit, red MAGA hat, sunglasses pushed up on head, at outdoor event on sunny day, laughing naturally, American flags around her, realistic skin, natural lighting, iPhone 15 Pro photo quality, photorealistic NOT AI art",
+  "Real photo young beautiful woman 26 years old, honey blonde hair in ponytail, wearing Trump 2024 cap, patriotic tank top, holding coffee cup, sitting on tailgate of pickup truck, countryside background, morning light, genuine smile, natural makeup, shot on film camera, grain texture, hyperrealistic photography",
+  "Photorealistic portrait of stunning young woman 24, natural dark brown hair, American flag earrings, wearing red patriotic dress, hand over heart, eyes closed in prayer, soft smile, outdoors at sunrise, warm golden tones, realistic skin pores and texture, Nikon camera professional portrait, NOT digital art, real photograph",
+  "Instagram photo of beautiful young woman 25, natural wavy blonde hair, wearing Make America Great Again hat in pink, white crop top, jeans, at country music concert, stage lights in background, huge smile laughing, natural look, realistic photo not AI generated",
+  "Real candid photograph beautiful woman 27, long natural brunette hair, no heavy makeup, wearing patriotic red white blue sundress, American flag pin on dress, standing at veterans memorial, touching name on wall, emotional genuine moment, photojournalism style, hyperrealistic",
+  "Lifestyle photo gorgeous young woman 23, blonde beach waves hair, wearing Trump hat and white bikini top at beach, holding small American flag, laughing with friends blurred behind her, summer golden light, genuine joy, iPhone photo quality, photorealistic",
 ];
 
 // ---------------------------------------------------------------------------
-// KARINA — Pexels backup queries (if DALL-E fails)
+// KARINA — Runway ML animation prompt (subtle motion for DALL-E images)
+// ---------------------------------------------------------------------------
+
+export const KARINA_RUNWAY_PROMPT =
+  "Subtle natural movement, hair gently moving in breeze, soft breathing, cinematic, lifelike motion, golden hour lighting";
+
+// ---------------------------------------------------------------------------
+// KARINA — Pexels backup queries
 // ---------------------------------------------------------------------------
 
 export const KARINA_PEXELS_QUERIES = [
@@ -57,66 +57,56 @@ export const KARINA_PEXELS_QUERIES = [
 ];
 
 // ---------------------------------------------------------------------------
-// KARINA — Voiceover scripts (matched by index to DALLE prompts)
+// KARINA — MAGA voiceover scripts (under 90 chars each)
 // ---------------------------------------------------------------------------
 
 export const KARINA_VOICE_SCRIPTS = [
-  "Beautiful, faithful, and unapologetic. This is what we stand for.",
-  "Real strength. Real beauty. Real values. God bless America.",
-  "She never apologizes for loving God, family, and country.",
-  "Traditional values, timeless beauty. This is the real America.",
-  "Faith over fear. Family over everything. Freedom always.",
-  "This is what a real American woman looks like. Stunning.",
-  "Conservative, confident, and absolutely beautiful. Goals.",
-  "She knows who she is and she is not sorry. Iconic.",
-  "Beauty, grace, and patriotism. Everything we love.",
-  "Raising the next generation right. This is what matters.",
+  "American women who love Trump are the most beautiful women in the world.",
+  "MAGA women: faithful, fearless, and absolutely stunning.",
+  "She wears her MAGA hat with pride and looks incredible doing it.",
+  "Conservative women are built different. God family country. Always.",
+  "Trump girls just hit different. Confident, beautiful, unapologetic.",
+  "This is what the mainstream media does not want you to see.",
+  "Real American beauty. No apologies. No compromises. Just patriotism.",
+  "Make America Great Again and look gorgeous doing it. Goals.",
+  "She stands for freedom and she looks amazing standing for it.",
+  "MAGA women love God love family love country. And we love them.",
 ];
 
 // ---------------------------------------------------------------------------
-// KARINA — Caption templates (matched by index to DALLE prompts)
+// KARINA — MAGA caption templates
 // ---------------------------------------------------------------------------
 
 export const KARINA_CAPTION_TEMPLATES = [
   {
-    hook: "This woman is everything \u{1f1fa}\u{1f1f8}",
-    body: "Beautiful. Strong. Faithful.\nUnapologetically conservative.\nThis is what we stand for.",
-    cta: "Follow if you agree \u{1f447} | Tag a strong woman \u{1f49b}",
+    hook: "MAGA women are built different \u{1f1fa}\u{1f1f8}",
+    body: "Faithful. Fearless. Beautiful.\nNo apologies for loving God and country.\nThis is what real looks like.",
+    cta: "Follow if you are a proud MAGA woman \u{1f985}",
   },
   {
-    hook: "Real beauty never goes out of style \u2728",
-    body: "Faith. Family. Freedom.\nNo apologies. No compromises.\nJust love for God and country.",
-    cta: "Drop a \u{1f1fa}\u{1f1f8} if you feel this | Follow for more",
+    hook: "She said Trump 2024 and looked stunning \u{1f60d}",
+    body: "Conservative women have something\nthe mainstream media cannot explain.\nConfidence, grace, and real beauty.",
+    cta: "Tag a beautiful MAGA woman you know \u{1f447}\u{1f1fa}\u{1f1f8}",
   },
   {
-    hook: "She said what we all needed to hear \u{1f64f}",
-    body: "Traditional values.\nTimeless grace.\nAmerican pride in every breath.",
-    cta: "Tag someone who embodies this \u{1f447} | Follow \u{1f514}",
+    hook: "This is what they do not show you \u{1f1fa}\u{1f1f8}",
+    body: "Beautiful conservative women.\nProud MAGA supporters.\nThe movement looks amazing.",
+    cta: "Follow for more real American content \u{1f985}",
   },
   {
-    hook: "Conservative women are the best women \u{1f985}",
-    body: "Strong in faith.\nGentle in spirit.\nUnbreakable in values.",
-    cta: "Agree? Drop a \u2764\ufe0f | Follow for daily inspiration",
+    hook: "MAGA hat never looked so good \u{1f60d}\u{1f1fa}\u{1f1f8}",
+    body: "Conservative. Confident. Gorgeous.\nThis is the America we are fighting for.\nGod bless every one of them.",
+    cta: "Drop a \u{1f1fa}\u{1f1f8} if you support Trump | Follow \u{1f514}",
   },
   {
-    hook: "God family country. In that order. \u{1f1fa}\u{1f1f8}",
-    body: "She knows her worth.\nShe knows her values.\nAnd she never apologizes for either.",
-    cta: "Share with someone who needs this today \u{1f64f}",
+    hook: "Trump girls are the best girls \u{1f49b}\u{1f1fa}\u{1f1f8}",
+    body: "Faith family freedom.\nIn that order. Always.\nAnd they look incredible living it.",
+    cta: "Share with your MAGA sisters \u{1f447} | Follow",
   },
   {
-    hook: "This is what American beauty looks like \u{1f49b}",
-    body: "Not what Hollywood tells you.\nNot what the media pushes.\nThe real thing. Right here.",
-    cta: "Follow for more real American content \u{1f1fa}\u{1f1f8}",
-  },
-  {
-    hook: "Raising the standard \u{1f64c}",
-    body: "Faith over fear.\nFamily over fame.\nFreedom over everything.",
-    cta: "Tag a conservative woman who inspires you \u{1f447}",
-  },
-  {
-    hook: "She gives us hope \u{1f54a}\ufe0f",
-    body: "Beautiful inside and out.\nGrounded in faith.\nProud to be American.",
-    cta: "Follow if this is your vibe \u{1f1fa}\u{1f1f8} | Share \u2764\ufe0f",
+    hook: "Real American beauty \u{1f985}",
+    body: "Not Hollywood.\nNot the media.\nJust real conservative women loving their country.",
+    cta: "Follow for daily MAGA inspiration \u{1f1fa}\u{1f1f8}",
   },
 ];
 
@@ -125,9 +115,9 @@ export const KARINA_CAPTION_TEMPLATES = [
 // ---------------------------------------------------------------------------
 
 const KARINA_HASHTAGS = [
-  "#conservative #america #patriot #maga #trump #usa #freedom #faith #family #americanflag #proud #traditional #godblessamerica #republican #americanwoman #patriotic #liberty #constitution #1776 #redwhiteandblue",
-  "#conservativewoman #faithoverfear #godfirst #americanpride #traditional #familyvalues #blessed #strongwomen #usa #patriotic #maga #trump2024 #godblessamerica #freedom #liberty #christian #prayer #bible #grateful #proudamerican",
-  "#faith #family #freedom #conservative #america #patriot #maga #traditional #godblessamerica #blessed #prayer #christian #bible #godsgrace #womenoffaith #americanbeauty #proudamerican #values #liberty #republic",
+  "#maga #trump #trump2024 #conservative #america #patriot #magawoman #godblessamerica #freedom #faith #family #usa #republican #americanwoman #patriotic #proudamerican #conservative #1776 #redwhiteandblue #makeamericagreatagain",
+  "#trumpgirl #maga #conservative #america #patriot #trump2024 #magahat #godfirst #faithoverfear #americanpride #traditional #familyvalues #blessed #strongwomen #usa #patriotic #freedom #liberty #christian #proudamerican",
+  "#magawomen #trump #conservative #america #patriot #faith #family #freedom #godblessamerica #traditional #americanbeauty #proudamerican #values #liberty #republic #trumpsupporter #christian #prayer #blessed #godsgrace",
 ];
 
 // ---------------------------------------------------------------------------
@@ -230,7 +220,7 @@ function pickIdx(len: number): number {
 }
 
 // ---------------------------------------------------------------------------
-// generateContentBrief — returns a fully matched set of prompts
+// generateContentBrief
 // ---------------------------------------------------------------------------
 
 export async function generateContentBrief(
@@ -244,21 +234,18 @@ export async function generateContentBrief(
   return generateAnimalBrief();
 }
 
-// ---------------------------------------------------------------------------
-// Karina brief — DALL-E primary, matched templates
-// ---------------------------------------------------------------------------
-
 function generateKarinaBrief(): ContentBrief {
   const idx = pickIdx(KARINA_DALLE_PROMPTS.length);
   const captionIdx = idx % KARINA_CAPTION_TEMPLATES.length;
   const caption = KARINA_CAPTION_TEMPLATES[captionIdx];
+  const voiceIdx = idx % KARINA_VOICE_SCRIPTS.length;
 
   return {
     hook: caption.hook,
     emotionalTrigger: "pride",
     pexelsQuery: pick(KARINA_PEXELS_QUERIES),
     visualDescription: KARINA_DALLE_PROMPTS[idx],
-    voiceoverScript: KARINA_VOICE_SCRIPTS[idx],
+    voiceoverScript: KARINA_VOICE_SCRIPTS[voiceIdx],
     voiceTone: "proud",
     captionHook: caption.hook,
     captionBody: caption.body,
@@ -268,10 +255,6 @@ function generateKarinaBrief(): ContentBrief {
     useDallePrimary: true,
   };
 }
-
-// ---------------------------------------------------------------------------
-// Animal brief — Pexels primary, matched templates
-// ---------------------------------------------------------------------------
 
 function generateAnimalBrief(): ContentBrief {
   const captionIdx = pickIdx(ANIMAL_CAPTION_TEMPLATES.length);

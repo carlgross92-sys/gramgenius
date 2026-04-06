@@ -2,9 +2,11 @@ import prisma from "@/lib/prisma";
 import {
   generateContentBrief,
   KARINA_PEXELS_QUERIES,
+  KARINA_RUNWAY_PROMPT,
 } from "@/lib/content-brief";
 import { searchAnimalVideo, downloadAndSaveVideo } from "@/lib/pexels";
 import { generateImage } from "@/lib/openai";
+import { imageToVideo, pollTask, downloadVideo } from "@/lib/runway";
 import { generateVoiceover, checkCredits } from "@/lib/elevenlabs";
 
 export const maxDuration = 300;
@@ -15,10 +17,7 @@ export async function GET(request: Request) {
   try {
     // ── Find next queued job ─────────────────────────────────────────────
     const job = await prisma.contentJob.findFirst({
-      where: {
-        status: "QUEUED",
-        retryCount: { lt: 3 },
-      },
+      where: { status: "QUEUED", retryCount: { lt: 3 } },
       orderBy: { createdAt: "asc" },
     });
 
@@ -70,43 +69,87 @@ export async function GET(request: Request) {
 
     console.log(`[ProcessQueue] Brand type: ${brandType}`);
 
-    // ── STEP 1: Generate matched content brief ───────────────────────────
+    // ── Generate matched content brief ───────────────────────────────────
     const brief = await generateContentBrief(brandType, "", "");
     console.log(
-      `[ProcessQueue] Brief: useDalle=${brief.useDallePrimary} hook="${brief.hook}" idx=${brief.templateIndex}`
+      `[ProcessQueue] Brief idx=${brief.templateIndex} hook="${brief.hook}"`
     );
 
     let videoUrl: string | null = null;
     let imageUrl: string | null = null;
     const qualityNotes: string[] = [];
+    let runwayTaskId: string | null = null;
 
-    // ── STEP 2: Get media ────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════════════════
+    // CONSERVATIVE: DALL-E image → Runway ML video → ElevenLabs voice
+    // ══════════════════════════════════════════════════════════════════════
     if (brief.useDallePrimary) {
-      // ── CONSERVATIVE: DALL-E first, Pexels fallback ────────────────────
-      console.log("[ProcessQueue] DALL-E primary for conservative brand");
+      console.log("[ProcessQueue] CONSERVATIVE pipeline: DALL-E → Runway → Voice");
+
+      // ── Step A: DALL-E image ───────────────────────────────────────────
+      let dalleImageUrl: string | null = null;
       try {
+        console.log(`[ProcessQueue] DALL-E prompt: ${brief.visualDescription.substring(0, 80)}...`);
         const dalleResult = await generateImage(
           brief.visualDescription,
           "1024x1792",
           "hd",
           "vivid"
         );
-        imageUrl = dalleResult.imageUrl;
-        qualityNotes.push(
-          `image: dalle ok (template ${brief.templateIndex})`
-        );
-        console.log("[ProcessQueue] DALL-E image generated");
+        dalleImageUrl = dalleResult.imageUrl;
+        imageUrl = dalleImageUrl; // Keep as fallback if Runway fails
+        qualityNotes.push(`dalle: ok (template ${brief.templateIndex})`);
+        console.log(`[ProcessQueue] DALL-E image: ${dalleImageUrl.substring(0, 60)}...`);
       } catch (dalleErr) {
         qualityNotes.push(
-          `image: dalle failed - ${dalleErr instanceof Error ? dalleErr.message : "unknown"}`
+          `dalle: failed - ${dalleErr instanceof Error ? dalleErr.message : "unknown"}`
         );
-        console.log("[ProcessQueue] DALL-E failed, trying Pexels backup...");
+        console.error("[ProcessQueue] DALL-E failed:", dalleErr);
+      }
 
-        // Pexels backup with curated queries
-        const pexelsQuery =
-          KARINA_PEXELS_QUERIES[
-            Math.floor(Math.random() * KARINA_PEXELS_QUERIES.length)
-          ];
+      // ── Step B: Runway ML animate image → video ────────────────────────
+      if (dalleImageUrl) {
+        try {
+          console.log("[ProcessQueue] Sending to Runway ML for animation...");
+          runwayTaskId = await imageToVideo(
+            dalleImageUrl,
+            KARINA_RUNWAY_PROMPT,
+            5,
+            "720:1280"
+          );
+          console.log(`[ProcessQueue] Runway task: ${runwayTaskId}`);
+          qualityNotes.push(`runway: task ${runwayTaskId}`);
+
+          // Poll for completion (max ~3 min to stay within 300s function limit)
+          const result = await pollTask(runwayTaskId, 180000);
+
+          if (result.status === "SUCCEEDED" && result.outputUrl) {
+            console.log(`[ProcessQueue] Runway SUCCEEDED: ${result.outputUrl.substring(0, 60)}...`);
+            // Download and save to Vercel Blob
+            const savedUrl = await downloadVideo(
+              result.outputUrl,
+              `karina-${job.id}-${Date.now()}.mp4`
+            );
+            videoUrl = savedUrl;
+            qualityNotes.push("runway: video saved");
+            console.log(`[ProcessQueue] Video saved: ${savedUrl.substring(0, 60)}...`);
+          } else {
+            qualityNotes.push(`runway: status=${result.status}`);
+          }
+        } catch (runwayErr) {
+          qualityNotes.push(
+            `runway: failed - ${runwayErr instanceof Error ? runwayErr.message : "unknown"}`
+          );
+          console.error("[ProcessQueue] Runway failed:", runwayErr);
+          // imageUrl still set as fallback — will post as FEED image
+        }
+      }
+
+      // ── Step B fallback: Pexels if both DALL-E and Runway failed ───────
+      if (!videoUrl && !imageUrl) {
+        const pexelsQuery = KARINA_PEXELS_QUERIES[
+          Math.floor(Math.random() * KARINA_PEXELS_QUERIES.length)
+        ];
         try {
           const pexelsResult = await searchAnimalVideo(
             brief.visualDescription,
@@ -117,16 +160,19 @@ export async function GET(request: Request) {
             `content-${job.id}-${Date.now()}`
           );
           videoUrl = savedUrl;
-          qualityNotes.push(`video: pexels backup ok (query: ${pexelsQuery})`);
+          qualityNotes.push(`pexels fallback: ok (query: ${pexelsQuery})`);
         } catch (pexErr) {
           qualityNotes.push(
-            `video: pexels backup failed - ${pexErr instanceof Error ? pexErr.message : "unknown"}`
+            `pexels fallback: failed - ${pexErr instanceof Error ? pexErr.message : "unknown"}`
           );
         }
       }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // ANIMALS: Pexels video → ElevenLabs voice
+    // ══════════════════════════════════════════════════════════════════════
     } else {
-      // ── ANIMALS: Pexels first, DALL-E fallback ─────────────────────────
-      console.log("[ProcessQueue] Pexels primary for animal brand");
+      console.log("[ProcessQueue] ANIMAL pipeline: Pexels → Voice");
       const pexelsQuery = brief.pexelsQuery || "funny dog";
       try {
         const pexelsResult = await searchAnimalVideo(
@@ -143,7 +189,7 @@ export async function GET(request: Request) {
         qualityNotes.push(
           `video: pexels failed - ${videoErr instanceof Error ? videoErr.message : "unknown"}`
         );
-        console.log("[ProcessQueue] Pexels failed, trying DALL-E fallback...");
+        // DALL-E fallback for animals
         try {
           const dalleResult = await generateImage(
             `A hilarious viral-worthy photo of ${job.topic}. Bright colors, expressive animal face, Instagram-ready. Photorealistic portrait 9:16.`,
@@ -161,24 +207,21 @@ export async function GET(request: Request) {
       }
     }
 
-    // ── STEP 3: Voiceover ────────────────────────────────────────────────
+    // ── Voiceover ────────────────────────────────────────────────────────
     let voiceoverUrl: string | null = null;
     try {
       const credits = await checkCredits();
       if (credits >= 100) {
-        const script = brief.voiceoverScript;
-        console.log(`[ProcessQueue] Voice: "${script}"`);
-        const voResult = await generateVoiceover(script);
+        console.log(`[ProcessQueue] Voice: "${brief.voiceoverScript}"`);
+        const voResult = await generateVoiceover(brief.voiceoverScript);
         if (voResult.url) {
           voiceoverUrl = voResult.url;
           qualityNotes.push("voiceover: ok");
         } else {
-          qualityNotes.push(
-            `voiceover: skipped - ${voResult.error || "no url"}`
-          );
+          qualityNotes.push(`voiceover: skipped - ${voResult.error || "no url"}`);
         }
       } else {
-        qualityNotes.push(`voiceover: skipped - low credits (${credits})`);
+        qualityNotes.push(`voiceover: low credits (${credits})`);
       }
     } catch (voErr) {
       qualityNotes.push(
@@ -186,33 +229,30 @@ export async function GET(request: Request) {
       );
     }
 
-    // ── STEP 4: Caption from brief templates ─────────────────────────────
+    // ── Caption from brief templates ─────────────────────────────────────
     const caption = [brief.captionHook, "", brief.captionBody, "", brief.captionCta]
       .join("\n")
       .trim();
     const hashtags = brief.hashtags;
-
     qualityNotes.push(`caption: ${caption.length} chars`);
-    qualityNotes.push(
-      `brief: hook="${brief.hook}" trigger=${brief.emotionalTrigger} dalleIdx=${brief.templateIndex}`
-    );
 
-    // ── STEP 5: Quality score ────────────────────────────────────────────
+    // ── Quality score ────────────────────────────────────────────────────
     let qualityScore = 0;
     if (videoUrl) qualityScore += 50;
-    else if (imageUrl) qualityScore += 40; // DALL-E images are high quality
+    else if (imageUrl) qualityScore += 35;
     if (voiceoverUrl) qualityScore += 25;
     if (caption.length > 50) qualityScore += 15;
     if (hashtags && hashtags.length > 50) qualityScore += 10;
 
     const passed = (videoUrl !== null || imageUrl !== null) && qualityScore >= 25;
-    const finalStatus = passed ? "COMPLETED" : "QUALITY_FAILED";
+    // Post as REEL if we have video, FEED if only image
+    const postType = videoUrl ? "REEL" : "FEED";
 
     console.log(
-      `[ProcessQueue] Quality: ${qualityScore} - ${passed ? "PASSED" : "FAILED"}`
+      `[ProcessQueue] Quality: ${qualityScore} | ${postType} | ${passed ? "PASSED" : "FAILED"}`
     );
 
-    // ── STEP 6: Save to MediaLibrary ─────────────────────────────────────
+    // ── Save to MediaLibrary ─────────────────────────────────────────────
     try {
       await prisma.mediaLibrary.create({
         data: {
@@ -221,38 +261,39 @@ export async function GET(request: Request) {
           topic: job.topic || brief.hook,
           caption,
           hashtags,
-          postType: videoUrl ? "REEL" : "FEED",
+          postType,
           status: "SAVED",
           voiceoverUrl: voiceoverUrl || undefined,
-          videoSource: videoUrl ? "PEXELS" : "DALLE",
+          videoSource: videoUrl
+            ? brief.useDallePrimary
+              ? "RUNWAY"
+              : "PEXELS"
+            : "DALLE",
           brandProfileId: job.brandProfileId || undefined,
         },
       });
-    } catch {
-      // Non-critical
-    }
+    } catch {}
 
-    // ── STEP 7: Update job ───────────────────────────────────────────────
+    // ── Update job ───────────────────────────────────────────────────────
     await prisma.contentJob.update({
       where: { id: job.id },
       data: {
-        status: finalStatus,
+        status: passed ? "COMPLETED" : "QUALITY_FAILED",
+        postType,
         caption,
         hashtags,
-        animal: videoUrl ? brief.pexelsQuery : null,
+        animal: videoUrl && !brief.useDallePrimary ? brief.pexelsQuery : null,
         videoUrl,
         imageUrl,
         voiceoverUrl,
         voiceStatus: voiceoverUrl ? "OK" : "FAILED",
         modelUsed: brief.useDallePrimary
-          ? "dalle-3 + elevenlabs"
+          ? `dalle-3 + runway${videoUrl ? " (video)" : " (image only)"} + elevenlabs`
           : "pexels + elevenlabs",
         qualityScore,
         qualityNotes: qualityNotes.join("; "),
         completedAt: new Date(),
-        failReason: !passed
-          ? `Quality score ${qualityScore} below threshold`
-          : null,
+        failReason: !passed ? `Quality ${qualityScore} below threshold` : null,
       },
     });
 
@@ -287,15 +328,17 @@ export async function GET(request: Request) {
       passed,
       qualityScore,
       brandType,
+      postType,
       usedDalle: brief.useDallePrimary,
       dallePrompt: brief.useDallePrimary
-        ? brief.visualDescription.substring(0, 120)
+        ? brief.visualDescription.substring(0, 150)
         : null,
+      runwayTaskId,
       hasVideo: !!videoUrl,
+      videoUrl: videoUrl || null,
       hasImage: !!imageUrl,
       imageUrl: imageUrl || null,
       hasVoiceover: !!voiceoverUrl,
-      pexelsQuery: brief.pexelsQuery,
       hook: brief.hook,
       voiceoverScript: brief.voiceoverScript,
       caption: caption.substring(0, 200),
