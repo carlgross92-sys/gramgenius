@@ -15,7 +15,7 @@ function getHeaders() {
 export async function imageToVideo(
   imageUrl: string,
   promptText: string,
-  duration: 5 | 10 = 10,
+  duration: 5 | 10 = 5,
   ratio: string = "720:1280"
 ): Promise<string> {
   const response = await fetch(`${RUNWAY_BASE}/image_to_video`, {
@@ -27,6 +27,7 @@ export async function imageToVideo(
       promptText,
       ratio,
       duration,
+      seed: Math.floor(Math.random() * 1000000),
     }),
   });
 

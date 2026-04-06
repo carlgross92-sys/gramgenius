@@ -23,15 +23,16 @@ export interface ContentBrief {
 
 // NOTE: DALL-E blocks political branding (MAGA/Trump). Keep prompts focused on
 // patriotic American woman aesthetic. Political messaging goes in captions/voice.
+// All prompts include camera specs + imperfection keywords for maximum realism.
 export const KARINA_DALLE_PROMPTS = [
-  "Photorealistic photograph of a stunning young American woman, 24 years old, natural blonde hair blowing in wind, wearing red baseball cap and white fitted top, American flag in background, confident smile, blue eyes, slight freckles, shot on Canon R5, 85mm lens, f1.8 bokeh, golden hour lighting, Instagram photo, hyperrealistic",
-  "Real photograph of beautiful young woman 25 years old, natural brunette long hair, wearing patriotic red white blue t-shirt, holding small American flag, standing at outdoor summer event, crowd blurred in background, genuine smile, natural skin texture, shot on Sony A7, photojournalism style, candid moment, hyperrealistic photography",
-  "Candid photo of gorgeous young woman 23 years old, auburn hair, wearing red white blue outfit, red baseball cap, sunglasses pushed up on head, at outdoor event on sunny day, laughing naturally, American flags around her, realistic skin, natural lighting, iPhone 15 Pro photo quality, photorealistic",
-  "Real photo young beautiful woman 26 years old, honey blonde hair in ponytail, wearing red cap and patriotic tank top, holding coffee cup, sitting on tailgate of pickup truck, American countryside background, morning light, genuine smile, natural makeup, shot on film camera, grain texture, hyperrealistic photography",
-  "Photorealistic portrait of stunning young woman 24, natural dark brown hair, small American flag earrings, wearing elegant red dress, hand over heart, soft smile, outdoors at sunrise, warm golden tones, realistic skin pores and texture, Nikon camera professional portrait, real photograph not digital art",
-  "Instagram photo of beautiful young woman 25, natural wavy blonde hair, wearing pink cap and white crop top, jeans, at country music concert, stage lights in background, huge smile laughing, natural look, realistic photo, hyperrealistic",
-  "Real candid photograph beautiful woman 27, long natural brunette hair, no heavy makeup, wearing patriotic red white blue sundress, small flag pin on dress, standing at veterans memorial, touching name on wall, emotional genuine moment, photojournalism style, hyperrealistic",
-  "Lifestyle photo gorgeous young woman 23, blonde beach waves hair, wearing red cap and white bikini top at beach, holding small American flag, laughing with friends blurred behind her, summer golden light, genuine joy, iPhone photo quality, photorealistic",
+  "Actual photograph of stunning young American woman aged 24, natural honey blonde hair with slight flyaways, wearing red baseball cap, white fitted shirt, slight freckles on nose, natural lip gloss only, confident smile showing real teeth, shot on Canon EOS R5 85mm f1.4, golden hour outdoor lighting, bokeh background of American countryside, visible skin pores, photojournalism style, NOT AI art, RAW photo, hyperrealistic photograph",
+  "Real candid photograph of beautiful young woman 25, natural brunette long hair, wearing patriotic red white blue shirt, holding small American flag, at outdoor summer event, crowd blurred behind, genuine laugh, natural skin texture with slight imperfections, visible flyaway hairs, shot on Sony A7III, documentary photography style, NOT illustration NOT CGI, actual photograph",
+  "Candid documentary photo of gorgeous young woman 23, auburn hair with natural highlights, red white blue outfit, red baseball cap, sunglasses pushed up on head, outdoor sunny day, laughing naturally, American flags around her, realistic unretouched skin, natural lighting, shot on iPhone 15 Pro Max, NOT a painting, photorealistic candid moment",
+  "Real photo young beautiful woman 26, honey blonde hair in messy ponytail with flyaways, wearing red cap and patriotic tank top, holding coffee cup, sitting on tailgate of pickup truck, American countryside, morning light, genuine smile, minimal natural makeup, visible skin texture and pores, shot on 35mm film camera with grain, hyperrealistic photography NOT digital art",
+  "Photorealistic portrait of stunning young woman 24, natural dark brown hair slightly windblown, small flag earrings, wearing elegant red dress, hand over heart, soft natural smile, outdoors at sunrise, warm golden tones, realistic skin pores and slight imperfections, shot on Nikon Z9 85mm f1.4, shallow depth of field, real photograph NOT AI generated",
+  "Instagram candid photo of beautiful young woman 25, natural wavy blonde hair, wearing pink baseball cap and white crop top, jeans, at country music festival, stage lights bokeh background, huge genuine smile laughing, no heavy makeup, natural skin, shot on Canon R5, documentary style, real photograph with slight film grain",
+  "Real photojournalism shot of beautiful woman 27, long natural brunette hair blowing in wind, no heavy makeup, wearing patriotic red white blue sundress with small flag pin, at veterans memorial, touching name on wall, emotional genuine moment, visible skin texture, shot on Sony A7RV, NOT digital art, hyperrealistic candid photograph",
+  "Lifestyle photo of gorgeous young woman 23, blonde beach waves with natural flyaways, wearing red cap and white top at beach, holding small American flag, laughing with friends blurred behind, summer golden hour light, genuine joy, visible freckles and natural skin, shot on iPhone 15 Pro, NOT AI art, real photograph",
 ];
 
 // ---------------------------------------------------------------------------
@@ -39,7 +40,10 @@ export const KARINA_DALLE_PROMPTS = [
 // ---------------------------------------------------------------------------
 
 export const KARINA_RUNWAY_PROMPT =
-  "Subtle natural movement, hair gently moving in breeze, soft breathing, cinematic, lifelike motion, golden hour lighting";
+  "Extremely subtle natural motion only. Hair moves very slightly in gentle breeze. Eyes blink naturally once. Slight smile. Chest rises and falls with breathing. Absolutely NO camera movement. NO morphing or distortion. Photorealistic human motion only. Like a portrait video NOT animation.";
+
+export const ANIMAL_RUNWAY_PROMPT =
+  "Natural animal movement. Tail wagging or ears perking up. Head turns slightly toward camera. Realistic fur movement. NO cartoon motion. NO distortion. Real animal behavior only.";
 
 // ---------------------------------------------------------------------------
 // KARINA — Pexels backup queries
