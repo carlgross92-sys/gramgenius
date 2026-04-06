@@ -144,6 +144,20 @@ export async function GET(request: Request) {
         }
         const containerId = containerData.id;
 
+        // ── Poll image container until ready (up to 60s) ─────────────────
+        const imgPollStart = Date.now();
+        while (Date.now() - imgPollStart < 60000) {
+          const statusRes = await fetch(
+            `${META_BASE}/${containerId}?fields=status_code&access_token=${accessToken}`
+          );
+          const statusData = await statusRes.json();
+          if (statusData.status_code === "FINISHED") break;
+          if (statusData.status_code === "ERROR") {
+            throw new Error(`Image container ERROR: ${JSON.stringify(statusData).substring(0, 200)}`);
+          }
+          await new Promise((r) => setTimeout(r, 3000));
+        }
+
         const publishRes = await fetch(
           `${META_BASE}/${igUserId}/media_publish`,
           {
